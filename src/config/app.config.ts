@@ -6,10 +6,10 @@ export default registerAs('appConfig', function () {
     apiVersion: process.env.API_VERSION || 'v1',
     port: parseInt(process.env.PORT || '3000'),
     // Swagger Configuration
-    swaggerTitle: process.env.SWAGGER_TITLE || 'Vibe Match API',
+    swaggerTitle: process.env.SWAGGER_TITLE || 'TL;DR API',
     swaggerDescription:
       process.env.SWAGGER_DESCRIPTION ||
-      'API documentation for Vibe Match backend',
+      'API documentation for TL;DR backend',
     swaggerVersion: process.env.SWAGGER_VERSION || '1.0',
     // Mail Configuration
     mailHost: process.env.MAIL_HOST,

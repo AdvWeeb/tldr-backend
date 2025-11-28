@@ -28,11 +28,11 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle(
       (configService.get('appConfig.swaggerTitle') as string) ||
-        'Vibe Match API',
+        'TL;DR API',
     )
     .setDescription(
       (configService.get('appConfig.swaggerDescription') as string) ||
-        'API documentation for Vibe Match backend',
+        'API documentation for TL;DR backend',
     )
     .setVersion(
       (configService.get('appConfig.swaggerVersion') as string) || '1.0',

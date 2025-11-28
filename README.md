@@ -1,6 +1,6 @@
-# Vibe Match Backend
+# TL;DR Backend
 
-Backend service for the **Vibe Match** platform
+Backend service for the **TL;DR** platform
 
 ---
 
@@ -11,8 +11,8 @@ Backend service for the **Vibe Match** platform
 #### 1. Clone the repo
 
 ```bash
-git clone https://github.com/Diploma-Survivors/vibe-match-backend
-cd vibe-match-backend
+git clone https://github.com/Diploma-Survivors/tldr-backend
+cd tldr-backend
 ```
 
 #### 2. Copy env file
@@ -46,9 +46,9 @@ npm run start:dev
 ### Option 2: Manual Setup
 
 1. Install **PostgreSQL** and **Redis** locally.
-2. Create a database named `vibe-match`:
+2. Create a database named `tldr`:
    ```bash
-   createdb vibe-match
+   createdb tldr
    ```
 3. Copy `.env` from `env.example` and update credentials.
 4. Install dependencies:
