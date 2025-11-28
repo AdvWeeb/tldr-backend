@@ -1,0 +1,196 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+**TL;DR** is an AI-powered email client backend that transforms email management into an intelligent, action-oriented task list. The system processes emails to extract tasks, priorities, deadlines, and provides AI-powered summaries and smart bundling.
+
+### Key Product Features (from PRD.md)
+- **Smart Bundling**: AI auto-groups non-urgent emails (Promotions, Newsletters, Notifications)
+- **Email-as-Tasks (EaT)**: Convert emails into tracked tasks with status (To-do, In-progress, Done)
+- **AI Services**: Email summarization, action item extraction, urgency scoring, quick reply suggestions
+- **Semantic Search**: Hybrid search (VectorDB + Keyword) for natural language queries
+- **Performance Targets**: Search latency < 1s, AI processing latency < 5s, AI classification accuracy ≥ 95%
+
+## Development Commands
+
+### Setup
+```bash
+# Using Docker (recommended)
+docker compose up -d          # Start PostgreSQL and Redis
+npm install                   # Install dependencies
+npm run start:dev             # Start with hot-reload
+
+# Manual setup (without Docker)
+# 1. Install PostgreSQL and Redis locally
+# 2. Create database: createdb tldr
+# 3. Copy .env from env.example and configure
+# 4. npm install && npm run start:dev
+```
+
+### Common Commands
+```bash
+npm run start:dev             # Development mode with hot-reload
+npm run start:debug           # Debug mode with watch
+npm run build                 # Build to /dist
+npm run start:prod            # Production mode (runs compiled code)
+
+# Testing
+npm run test                  # Run unit tests
+npm run test:watch            # Run tests in watch mode
+npm run test:cov              # Run tests with coverage
+npm run test:e2e              # Run end-to-end tests
+
+# Code Quality
+npm run lint                  # Run ESLint (auto-fix enabled)
+npm run format                # Run Prettier formatting
+
+# Database Migrations
+npm run typeorm:generate -- -n MigrationName    # Generate migration
+npm run typeorm:run                             # Run migrations
+npm run typeorm:revert                          # Revert last migration
+```
+
+### API Documentation
+Swagger docs auto-generated at: `http://localhost:3000/api/docs`
+
+## Architecture Overview
+
+### Tech Stack
+- **Framework**: NestJS 11 (TypeScript)
+- **Database**: PostgreSQL with TypeORM
+- **Caching**: Redis (via @nestjs/cache-manager)
+- **Validation**: class-validator + class-transformer
+- **API Docs**: Swagger/OpenAPI
+
+### Project Structure
+```
+src/
+├── main.ts                    # Application entry point, Swagger setup
+├── app.module.ts              # Root module (ConfigModule, TypeORM, CacheModule)
+├── config/                    # Configuration modules
+│   ├── app.config.ts         # App settings (port, API version, Swagger)
+│   ├── database.config.ts    # PostgreSQL configuration
+│   ├── redis.config.ts       # Redis cache configuration
+│   └── environment.validation.ts  # Joi schema for env vars
+├── common/                    # Shared utilities
+│   ├── filters/              # Global exception filter
+│   ├── interceptors/         # Data response interceptor (wraps responses)
+│   └── pagination/           # Pagination provider and DTOs
+└── modules/                   # Feature modules
+    ├── auth/                 # Authentication module (JWT, login, register)
+    └── user/                 # User management module
+```
+
+### Configuration System
+- **Environment Variables**: All config loaded via `@nestjs/config` with Joi validation
+- **Config Files**: `src/config/*.config.ts` files register namespaced configs (database, redis, app)
+- **Validation**: `environment.validation.ts` enforces required env vars at startup
+- **Required Env Vars**: DATABASE_*, REDIS_*, JWT_*, MAIL_HOST, SMTP_*
+
+### Database & ORM
+- **TypeORM** with PostgreSQL
+- **Auto-sync**: Enabled in development via `DATABASE_SYNC=true`
+- **Migrations**: Required for production (`migrationsRun: true` in database.config.ts)
+- **Entities**: Auto-loaded from `dist/**/*.entity.{ts,js}`
+
+### Global Middleware & Interceptors
+- **ValidationPipe**: Global validation with whitelist, transform, and forbidNonWhitelisted enabled (main.ts:19-25)
+- **GlobalExceptionFilter**: Centralizes error handling, logs exceptions, returns structured error responses
+- **DataResponseInterceptor**: Wraps all responses in `{ status, apiVersion, data }` format
+- **API Prefix**: All routes prefixed with API version (default: `/v1`)
+
+### Pagination System
+- **Provider**: `PaginationProvider` (src/common/pagination/providers/pagination.provider.ts)
+- **Request-scoped**: Injects `REQUEST` to build pagination URLs
+- **Response Format**: Returns `{ data, meta: { itemsPerPage, totalItems, currentPage, totalPages }, links: { first, last, current, next, previous } }`
+- **Usage**: Inject `PaginationProvider` into services, call `paginateQuery(paginationQuery, repository)`
+
+## Module Development
+
+### Creating New Modules
+```bash
+nest g resource <module-name>   # Generates controller, service, module, DTOs, entities
+```
+
+### Module Guidelines
+- All modules must be placed in `src/modules/`
+- Each module follows the standard structure: controller, service, module, dto/, entities/
+- Register modules in `app.module.ts`
+- Use NestJS Logger instead of `console.log`
+- Follow existing patterns for DTOs (use class-validator decorators)
+- All entities extend TypeORM `Entity` with proper decorators
+
+### Authentication Module Pattern
+- Located at `src/modules/auth/`
+- Handles JWT-based authentication (access + refresh tokens)
+- Environment variables: `JWT_SECRET`, `JWT_TOKEN_AUDIENCE`, `JWT_TOKEN_ISSUER`, `JWT_ACCESS_TOKEN_TTL`, `JWT_REFRESH_TOKEN_TTL`
+- Controllers should use `@ApiBearerAuth()` decorator for protected routes
+
+## Git Workflow
+
+### Branch Strategy: Trunk-Based Development
+- **Main branch**: `main` (protected, requires PR approval)
+- **Feature branches**: `feature/*`
+- **Bug fixes**: `fix/*`
+- **Maintenance**: `chore/*`
+
+### Commit Convention
+Follow [Conventional Commits](https://www.conventionalcommits.org/):
+- `feat: add email summarization endpoint`
+- `fix: resolve pagination links bug`
+- `chore: update dependencies`
+- `docs: update API documentation`
+
+### Pre-commit Hooks
+- **Husky** configured with lint-staged
+- Auto-runs ESLint and Prettier on staged files
+- Format: `*.{ts,js}` → eslint --fix + prettier --write
+- Format: `*.{json,md,yml,yaml}` → prettier --write
+
+## Critical Implementation Notes
+
+### AI Services Architecture (Future)
+When implementing AI features (email summary, action extraction, urgency scoring):
+- Target latency: < 5s for AI processing
+- Target accuracy: ≥ 95% for classification
+- Consider implementing retry logic and fallback mechanisms
+- Use Redis for caching AI responses to reduce latency
+
+### Semantic Search (Future)
+- Implement Hybrid Search: VectorDB + Keyword search
+- Target latency: < 1s
+- Use PostgreSQL pgvector or external VectorDB (Pinecone, Weaviate)
+
+### Email-as-Tasks Implementation (Future)
+- Task statuses: To-do, In-progress, Done
+- Support deadline assignment, snooze, and pinning
+- Consider task priority based on AI urgency scoring
+
+### Performance Considerations
+- Use Redis caching aggressively for frequently accessed data
+- Implement database indexing for search-heavy operations
+- Monitor query performance with TypeORM logging in development
+- Use pagination for all list endpoints
+
+## Testing Guidelines
+
+- Unit tests co-located with modules (`*.spec.ts`)
+- E2E tests in `/test` directory
+- Use NestJS testing utilities (`@nestjs/testing`)
+- Mock external dependencies (database, Redis, email service)
+- Test coverage tracked via Jest (`npm run test:cov`)
+
+## Environment Configuration
+
+Required environment variables (see `src/config/environment.validation.ts`):
+- `NODE_ENV`: development | production | test | provision
+- `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USERNAME`, `DATABASE_PASSWORD`
+- `REDIS_HOST`, `REDIS_PORT`, `REDIS_DB` (optional: `REDIS_PASSWORD`)
+- `JWT_SECRET`, `JWT_TOKEN_AUDIENCE`, `JWT_TOKEN_ISSUER`, `JWT_ACCESS_TOKEN_TTL`, `JWT_REFRESH_TOKEN_TTL`
+- `MAIL_HOST`, `SMTP_USERNAME`, `SMTP_PASSWORD`
+
+Development-specific:
+- `DATABASE_SYNC=true` enables auto-schema sync (use migrations in production)
+- `DATABASE_AUTOLOAD=true` auto-loads entities
