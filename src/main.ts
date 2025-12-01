@@ -27,8 +27,7 @@ async function bootstrap() {
   // Swagger setup
   const config = new DocumentBuilder()
     .setTitle(
-      (configService.get('appConfig.swaggerTitle') as string) ||
-        'TL;DR API',
+      (configService.get('appConfig.swaggerTitle') as string) || 'TL;DR API',
     )
     .setDescription(
       (configService.get('appConfig.swaggerDescription') as string) ||

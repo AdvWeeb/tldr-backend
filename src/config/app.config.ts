@@ -8,8 +8,7 @@ export default registerAs('appConfig', function () {
     // Swagger Configuration
     swaggerTitle: process.env.SWAGGER_TITLE || 'TL;DR API',
     swaggerDescription:
-      process.env.SWAGGER_DESCRIPTION ||
-      'API documentation for TL;DR backend',
+      process.env.SWAGGER_DESCRIPTION || 'API documentation for TL;DR backend',
     swaggerVersion: process.env.SWAGGER_VERSION || '1.0',
     // Mail Configuration
     mailHost: process.env.MAIL_HOST,
