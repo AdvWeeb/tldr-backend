@@ -2,6 +2,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
@@ -12,6 +13,8 @@ import environmentValidation from './config/environment.validation';
 import redisConfig from './config/redis.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
+import { HealthModule } from './modules/health/health.module';
+import { MailboxModule } from './modules/mailbox/mailbox.module';
 import { UserModule } from './modules/user/user.module';
 
 @Module({
@@ -55,8 +58,11 @@ import { UserModule } from './modules/user/user.module';
         limit: 100,
       },
     ]),
+    ScheduleModule.forRoot(),
     AuthModule,
     UserModule,
+    MailboxModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [
