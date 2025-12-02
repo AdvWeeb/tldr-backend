@@ -10,6 +10,18 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
 
+  // Enable CORS for frontend
+  const corsOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',')
+    : ['http://localhost:5173'];
+
+  app.enableCors({
+    origin: corsOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+  });
+
   // Global prefix
   const apiVersion =
     (configService.get('appConfig.apiVersion') as string) || 'v1';
