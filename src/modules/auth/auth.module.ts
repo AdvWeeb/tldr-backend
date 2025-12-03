@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -6,6 +6,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import encryptionConfig from '../../config/encryption.config';
 import googleOAuthConfig from '../../config/google-oauth.config';
 import jwtConfig from '../../config/jwt.config';
+import { MailboxModule } from '../mailbox/mailbox.module';
 import { User } from '../user/entities/user.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -22,6 +23,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     ConfigModule.forFeature(encryptionConfig),
     TypeOrmModule.forFeature([RefreshToken, User]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
+    forwardRef(() => MailboxModule),
     JwtModule.registerAsync({
       imports: [ConfigModule.forFeature(jwtConfig)],
       useFactory: (configService: ConfigService) => ({

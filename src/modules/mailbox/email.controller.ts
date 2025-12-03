@@ -8,6 +8,7 @@ import {
   Param,
   ParseIntPipe,
   Patch,
+  Post,
   Query,
   Req,
 } from '@nestjs/common';
@@ -26,6 +27,7 @@ import {
   EmailDetailDto,
   EmailQueryDto,
   PaginatedEmailsDto,
+  SendEmailDto,
   UpdateEmailDto,
 } from './dto';
 import { EmailService } from './email.service';
@@ -52,6 +54,29 @@ export class EmailController {
   ): Promise<PaginatedEmailsDto> {
     const baseUrl = `${request.protocol}://${request.get('host')}${request.path}`;
     return this.emailService.findAll(user.id, query, baseUrl);
+  }
+
+  @Post('send')
+  @ApiOperation({ summary: 'Send an email via Gmail API' })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'Email sent successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        messageId: { type: 'string', description: 'Gmail message ID' },
+      },
+    },
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Mailbox not found',
+  })
+  async sendEmail(
+    @CurrentUser() user: User,
+    @Body() sendDto: SendEmailDto,
+  ): Promise<{ messageId: string }> {
+    return this.emailService.sendEmail(user.id, sendDto);
   }
 
   @Get(':id')

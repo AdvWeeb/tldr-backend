@@ -12,4 +12,5 @@ export {
   MailboxListResponseDto,
   MailboxResponseDto,
 } from './mailbox-response.dto';
+export { SendEmailDto } from './send-email.dto';
 export { UpdateEmailDto } from './update-email.dto';

@@ -405,4 +405,97 @@ export class GmailService {
 
     return { bodyHtml, bodyText, attachments };
   }
+
+  /**
+   * Send an email via Gmail API
+   */
+  async sendEmail(
+    mailbox: Mailbox,
+    emailData: {
+      to: string[];
+      cc?: string[];
+      bcc?: string[];
+      subject: string;
+      body: string;
+      bodyHtml?: string;
+      inReplyTo?: string;
+      threadId?: string;
+    },
+  ): Promise<string> {
+    const { gmail } = this.getAuthenticatedClient(mailbox);
+
+    // Build email message in RFC 2822 format
+    const messageParts = [
+      `From: ${mailbox.email}`,
+      `To: ${emailData.to.join(', ')}`,
+    ];
+
+    if (emailData.cc && emailData.cc.length > 0) {
+      messageParts.push(`Cc: ${emailData.cc.join(', ')}`);
+    }
+
+    if (emailData.bcc && emailData.bcc.length > 0) {
+      messageParts.push(`Bcc: ${emailData.bcc.join(', ')}`);
+    }
+
+    messageParts.push(`Subject: ${emailData.subject}`);
+
+    if (emailData.inReplyTo) {
+      messageParts.push(`In-Reply-To: ${emailData.inReplyTo}`);
+      messageParts.push(`References: ${emailData.inReplyTo}`);
+    }
+
+    messageParts.push('MIME-Version: 1.0');
+
+    // If HTML body is provided, send multipart
+    if (emailData.bodyHtml) {
+      const boundary = `boundary_${Date.now()}`;
+      messageParts.push(
+        `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      );
+      messageParts.push('');
+      messageParts.push(`--${boundary}`);
+      messageParts.push('Content-Type: text/plain; charset=UTF-8');
+      messageParts.push('');
+      messageParts.push(emailData.body);
+      messageParts.push('');
+      messageParts.push(`--${boundary}`);
+      messageParts.push('Content-Type: text/html; charset=UTF-8');
+      messageParts.push('');
+      messageParts.push(emailData.bodyHtml);
+      messageParts.push('');
+      messageParts.push(`--${boundary}--`);
+    } else {
+      messageParts.push('Content-Type: text/plain; charset=UTF-8');
+      messageParts.push('');
+      messageParts.push(emailData.body);
+    }
+
+    const message = messageParts.join('\r\n');
+    const encodedMessage = Buffer.from(message)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+
+    const sendRequest: gmail_v1.Params$Resource$Users$Messages$Send = {
+      userId: 'me',
+      requestBody: {
+        raw: encodedMessage,
+      },
+    };
+
+    // Add threadId for replies
+    if (emailData.threadId) {
+      sendRequest.requestBody!.threadId = emailData.threadId;
+    }
+
+    const response = await gmail.users.messages.send(sendRequest);
+
+    this.logger.log(
+      `Sent email from ${mailbox.email} to ${emailData.to.join(', ')}`,
+    );
+
+    return response.data.id!;
+  }
 }

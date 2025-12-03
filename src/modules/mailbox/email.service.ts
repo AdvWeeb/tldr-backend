@@ -5,9 +5,11 @@ import {
   EmailQueryDto,
   EmailSummaryDto,
   PaginatedEmailsDto,
+  SendEmailDto,
   UpdateEmailDto,
 } from './dto';
 import { Email, Mailbox } from './entities';
+import { GmailService } from './providers/gmail.service';
 
 @Injectable()
 export class EmailService {
@@ -18,6 +20,7 @@ export class EmailService {
     private readonly emailRepository: Repository<Email>,
     @InjectRepository(Mailbox)
     private readonly mailboxRepository: Repository<Mailbox>,
+    private readonly gmailService: GmailService,
   ) {}
 
   async findAll(
@@ -281,7 +284,56 @@ export class EmailService {
         currentPage: page,
         totalPages: 0,
       },
-      links: this.buildPaginationLinks(baseUrl, page, 0, limit, query),
+      links: this.buildPaginationLinks(baseUrl, page, 1, limit, query),
     };
+  }
+
+  async sendEmail(
+    userId: number,
+    sendDto: SendEmailDto,
+  ): Promise<{ messageId: string }> {
+    // Verify mailbox belongs to user
+    const mailbox = await this.mailboxRepository.findOne({
+      where: { id: sendDto.mailboxId, userId, deletedAt: IsNull() },
+    });
+
+    if (!mailbox) {
+      throw new NotFoundException(`Mailbox ${sendDto.mailboxId} not found`);
+    }
+
+    // Check if token is expired or about to expire (within 5 minutes)
+    const now = new Date();
+    const expiresAt = mailbox.tokenExpiresAt;
+    const needsRefresh =
+      !expiresAt || expiresAt.getTime() - now.getTime() < 5 * 60 * 1000;
+
+    if (needsRefresh) {
+      this.logger.log(`Refreshing expired token for mailbox ${mailbox.id}`);
+      const { accessToken, expiresAt: newExpiresAt } =
+        await this.gmailService.refreshTokens(mailbox);
+
+      // Update mailbox with new token
+      mailbox.encryptedAccessToken = accessToken;
+      mailbox.tokenExpiresAt = newExpiresAt;
+      await this.mailboxRepository.save(mailbox);
+    }
+
+    // Send via Gmail API
+    const messageId = await this.gmailService.sendEmail(mailbox, {
+      to: sendDto.to,
+      cc: sendDto.cc,
+      bcc: sendDto.bcc,
+      subject: sendDto.subject,
+      body: sendDto.body,
+      bodyHtml: sendDto.bodyHtml,
+      inReplyTo: sendDto.inReplyTo,
+      threadId: sendDto.threadId,
+    });
+
+    this.logger.log(
+      `Sent email from mailbox ${mailbox.id} to ${sendDto.to.join(', ')}`,
+    );
+
+    return { messageId };
   }
 }

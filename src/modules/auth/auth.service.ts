@@ -1,12 +1,15 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   UnauthorizedException,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
 import { Repository } from 'typeorm';
+import { MailboxService } from '../mailbox/mailbox.service';
 import { AuthProvider, User } from '../user/entities/user.entity';
 import { GoogleAuthDto } from './dto/google-auth.dto';
 import { LoginDto } from './dto/login.dto';
@@ -29,6 +32,8 @@ export class AuthService {
     private readonly userRepository: Repository<User>,
     private readonly tokenService: TokenService,
     private readonly googleOAuthService: GoogleOAuthService,
+    @Inject(forwardRef(() => MailboxService))
+    private readonly mailboxService: MailboxService,
   ) {}
 
   async register(
@@ -185,6 +190,49 @@ export class AuthService {
         googleTokens.refreshToken || undefined,
         metadata,
       );
+
+    // Auto-create mailbox with Gmail tokens (avoids OAuth code reuse)
+    if (googleTokens.accessToken && googleTokens.refreshToken) {
+      setImmediate(() => {
+        void (async () => {
+          try {
+            const existingMailboxes = await this.mailboxService.findAllByUser(
+              user.id,
+            );
+            const mailboxExists = existingMailboxes.some(
+              (m) => m.email.toLowerCase() === userInfo.email.toLowerCase(),
+            );
+
+            if (!mailboxExists) {
+              const { google } = await import('googleapis');
+              const { OAuth2Client } = await import('google-auth-library');
+              const oauth2Client = new OAuth2Client();
+              oauth2Client.setCredentials({
+                access_token: googleTokens.accessToken,
+                refresh_token: googleTokens.refreshToken!,
+              });
+
+              const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+              const profile = await gmail.users.getProfile({ userId: 'me' });
+
+              await this.mailboxService.createGmailMailboxFromTokens(
+                user.id,
+                userInfo.email,
+                googleTokens.accessToken,
+                googleTokens.refreshToken!,
+                googleTokens.expiresIn,
+                profile.data.historyId || null,
+              );
+              this.logger.log(`Auto-created mailbox for ${user.email}`);
+            }
+          } catch (error) {
+            this.logger.error(
+              `Failed to auto-create mailbox: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        })();
+      });
+    }
 
     return {
       userId: user.id,

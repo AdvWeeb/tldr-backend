@@ -124,6 +124,55 @@ export class MailboxService {
     await this.emailSyncService.syncOnDemand(mailbox.id);
   }
 
+  /**
+   * Create mailbox directly from OAuth tokens (called during login)
+   */
+  async createGmailMailboxFromTokens(
+    userId: number,
+    email: string,
+    accessToken: string,
+    refreshToken: string,
+    expiresIn: number,
+    historyId: string | null,
+  ): Promise<Mailbox> {
+    const existingMailbox = await this.mailboxRepository.findOne({
+      where: { userId, email, deletedAt: IsNull() },
+    });
+
+    if (existingMailbox) {
+      this.logger.log(`Mailbox ${email} already exists for user ${userId}`);
+      return existingMailbox;
+    }
+
+    const expiryDate = new Date(Date.now() + expiresIn * 1000);
+
+    const mailbox = this.mailboxRepository.create({
+      userId,
+      email,
+      provider: MailboxProvider.GMAIL,
+      encryptedAccessToken: this.encryptionUtil.encrypt(accessToken),
+      encryptedRefreshToken: this.encryptionUtil.encrypt(refreshToken),
+      tokenExpiresAt: expiryDate,
+      syncStatus: MailboxSyncStatus.PENDING,
+      historyId: historyId || null,
+    });
+
+    const savedMailbox = await this.mailboxRepository.save(mailbox);
+
+    this.logger.log(`Created Gmail mailbox ${email} for user ${userId}`);
+
+    // Trigger background sync
+    setImmediate(() => {
+      this.emailSyncService.fullSync(savedMailbox.id).catch((err: Error) => {
+        this.logger.error(
+          `Initial sync failed for mailbox ${savedMailbox.id}: ${err.message}`,
+        );
+      });
+    });
+
+    return savedMailbox;
+  }
+
   async disconnectMailbox(userId: number, mailboxId: number): Promise<void> {
     const mailbox = await this.findOneByUser(userId, mailboxId);
 
