@@ -1,10 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
   IsArray,
   IsEmail,
   IsNotEmpty,
   IsOptional,
   IsString,
+  MaxLength,
+  MinLength,
 } from 'class-validator';
 
 export class SendEmailDto {
@@ -21,8 +25,12 @@ export class SendEmailDto {
     type: [String],
   })
   @IsArray()
-  @IsEmail({}, { each: true })
-  @IsNotEmpty()
+  @ArrayNotEmpty({ message: 'At least one recipient is required' })
+  @ArrayMaxSize(500, { message: 'Cannot exceed 500 recipients' })
+  @IsEmail(
+    {},
+    { each: true, message: 'Each recipient must be a valid email address' },
+  )
   to: string[];
 
   @ApiProperty({
@@ -32,7 +40,11 @@ export class SendEmailDto {
     required: false,
   })
   @IsArray()
-  @IsEmail({}, { each: true })
+  @ArrayMaxSize(500, { message: 'Cannot exceed 500 CC recipients' })
+  @IsEmail(
+    {},
+    { each: true, message: 'Each CC recipient must be a valid email address' },
+  )
   @IsOptional()
   cc?: string[];
 
@@ -43,7 +55,11 @@ export class SendEmailDto {
     required: false,
   })
   @IsArray()
-  @IsEmail({}, { each: true })
+  @ArrayMaxSize(500, { message: 'Cannot exceed 500 BCC recipients' })
+  @IsEmail(
+    {},
+    { each: true, message: 'Each BCC recipient must be a valid email address' },
+  )
   @IsOptional()
   bcc?: string[];
 
@@ -52,7 +68,8 @@ export class SendEmailDto {
     example: 'Hello World',
   })
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Subject is required' })
+  @MaxLength(998, { message: 'Subject cannot exceed 998 characters' })
   subject: string;
 
   @ApiProperty({
@@ -60,7 +77,8 @@ export class SendEmailDto {
     example: 'This is the email body',
   })
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'Email body is required' })
+  @MinLength(1, { message: 'Email body cannot be empty' })
   body: string;
 
   @ApiProperty({

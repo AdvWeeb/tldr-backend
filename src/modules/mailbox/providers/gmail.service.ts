@@ -441,38 +441,52 @@ export class GmailService {
     messageParts.push(`Subject: ${emailData.subject}`);
 
     if (emailData.inReplyTo) {
-      messageParts.push(`In-Reply-To: ${emailData.inReplyTo}`);
-      messageParts.push(`References: ${emailData.inReplyTo}`);
+      messageParts.push(`In-Reply-To: <${emailData.inReplyTo}>`);
+      messageParts.push(`References: <${emailData.inReplyTo}>`);
     }
 
     messageParts.push('MIME-Version: 1.0');
 
     // If HTML body is provided, send multipart
     if (emailData.bodyHtml) {
-      const boundary = `boundary_${Date.now()}`;
+      const boundary = `boundary_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       messageParts.push(
         `Content-Type: multipart/alternative; boundary="${boundary}"`,
       );
       messageParts.push('');
       messageParts.push(`--${boundary}`);
       messageParts.push('Content-Type: text/plain; charset=UTF-8');
+      messageParts.push('Content-Transfer-Encoding: 8bit');
       messageParts.push('');
       messageParts.push(emailData.body);
       messageParts.push('');
       messageParts.push(`--${boundary}`);
       messageParts.push('Content-Type: text/html; charset=UTF-8');
+      messageParts.push('Content-Transfer-Encoding: 8bit');
       messageParts.push('');
       messageParts.push(emailData.bodyHtml);
       messageParts.push('');
       messageParts.push(`--${boundary}--`);
     } else {
       messageParts.push('Content-Type: text/plain; charset=UTF-8');
+      messageParts.push('Content-Transfer-Encoding: 8bit');
       messageParts.push('');
       messageParts.push(emailData.body);
     }
 
     const message = messageParts.join('\r\n');
-    const encodedMessage = Buffer.from(message)
+
+    // Validate message size (Gmail limit is 25MB)
+    const messageSize = Buffer.byteLength(message, 'utf8');
+    const maxSize = 25 * 1024 * 1024; // 25MB
+    if (messageSize > maxSize) {
+      throw new Error(
+        `Message size (${(messageSize / 1024 / 1024).toFixed(2)}MB) exceeds Gmail limit of 25MB`,
+      );
+    }
+
+    // Encode to base64url (RFC 4648 Section 5)
+    const encodedMessage = Buffer.from(message, 'utf8')
       .toString('base64')
       .replace(/\+/g, '-')
       .replace(/\//g, '_')
@@ -492,10 +506,14 @@ export class GmailService {
 
     const response = await gmail.users.messages.send(sendRequest);
 
+    if (!response.data.id) {
+      throw new Error('Gmail API did not return a message ID');
+    }
+
     this.logger.log(
-      `Sent email from ${mailbox.email} to ${emailData.to.join(', ')}`,
+      `Sent email from ${mailbox.email} to ${emailData.to.join(', ')} - Message ID: ${response.data.id}`,
     );
 
-    return response.data.id!;
+    return response.data.id;
   }
 }
