@@ -7,7 +7,10 @@ import {
   Ip,
   Post,
   Query,
+  Res,
+  Req,
 } from '@nestjs/common';
+import type { Response, Request } from 'express';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -22,7 +25,6 @@ import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
 import { GoogleAuthDto } from './dto/google-auth.dto';
 import { LoginDto } from './dto/login.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/token-response.dto';
 
@@ -52,8 +54,26 @@ export class AuthController {
     @Body() registerDto: RegisterDto,
     @Headers('user-agent') userAgent: string,
     @Ip() ipAddress: string,
-  ): Promise<AuthResponseDto> {
-    return this.authService.register(registerDto, { userAgent, ipAddress });
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Omit<AuthResponseDto, 'refreshToken'>> {
+    const result = await this.authService.register(registerDto, {
+      userAgent,
+      ipAddress,
+    });
+
+    // Set refresh token as HttpOnly cookie
+    res.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/v1/auth/refresh',
+    });
+
+    // Return response without refresh token
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { refreshToken, ...response } = result;
+    return response;
   }
 
   @Post('login')
@@ -74,8 +94,26 @@ export class AuthController {
     @Body() loginDto: LoginDto,
     @Headers('user-agent') userAgent: string,
     @Ip() ipAddress: string,
-  ): Promise<AuthResponseDto> {
-    return this.authService.login(loginDto, { userAgent, ipAddress });
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Omit<AuthResponseDto, 'refreshToken'>> {
+    const result = await this.authService.login(loginDto, {
+      userAgent,
+      ipAddress,
+    });
+
+    // Set refresh token as HttpOnly cookie
+    res.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/v1/auth/refresh',
+    });
+
+    // Return response without refresh token
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { refreshToken, ...response } = result;
+    return response;
   }
 
   @Post('google')
@@ -102,11 +140,29 @@ export class AuthController {
     @Body() googleAuthDto: GoogleAuthDto,
     @Headers('user-agent') userAgent: string,
     @Ip() ipAddress: string,
-  ): Promise<AuthResponseDto> {
-    return this.authService.authenticateWithGoogle(googleAuthDto, {
-      userAgent,
-      ipAddress,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Omit<AuthResponseDto, 'refreshToken'>> {
+    const result = await this.authService.authenticateWithGoogle(
+      googleAuthDto,
+      {
+        userAgent,
+        ipAddress,
+      },
+    );
+
+    // Set refresh token as HttpOnly cookie
+    res.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/v1/auth/refresh',
     });
+
+    // Return response without refresh token
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { refreshToken, ...response } = result;
+    return response;
   }
 
   @Post('refresh')
@@ -124,14 +180,36 @@ export class AuthController {
     description: 'Invalid or expired refresh token',
   })
   async refreshToken(
-    @Body() refreshTokenDto: RefreshTokenDto,
+    @Req() req: Request,
     @Headers('user-agent') userAgent: string,
     @Ip() ipAddress: string,
-  ): Promise<AuthResponseDto> {
-    return this.authService.refreshToken(refreshTokenDto.refreshToken, {
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Omit<AuthResponseDto, 'refreshToken'>> {
+    const refreshToken = (req.cookies as Record<string, any> | undefined)
+      ?.refreshToken as string | undefined;
+
+    if (!refreshToken) {
+      throw new Error('Refresh token not found in cookies');
+    }
+
+    const result = await this.authService.refreshToken(refreshToken, {
       userAgent,
       ipAddress,
     });
+
+    // Set new refresh token as HttpOnly cookie
+    res.cookie('refreshToken', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/v1/auth/refresh',
+    });
+
+    // Return response without refresh token
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { refreshToken: _unused, ...response } = result;
+    return response;
   }
 
   @Post('logout')
@@ -154,13 +232,23 @@ export class AuthController {
   })
   async logout(
     @CurrentUser() user: User,
-    @Body() refreshTokenDto: RefreshTokenDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
     @Query('all') revokeAll?: boolean,
   ): Promise<void> {
-    await this.authService.logout(
-      user.id,
-      refreshTokenDto.refreshToken,
-      revokeAll === true,
-    );
+    const refreshToken = (req.cookies as Record<string, any> | undefined)
+      ?.refreshToken as string | undefined;
+
+    if (refreshToken) {
+      await this.authService.logout(user.id, refreshToken, revokeAll === true);
+    }
+
+    // Clear the refresh token cookie
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      path: '/v1/auth/refresh',
+    });
   }
 }
