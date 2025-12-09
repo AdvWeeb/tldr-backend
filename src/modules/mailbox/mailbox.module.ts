@@ -12,6 +12,7 @@ import { MailboxController } from './mailbox.controller';
 import { MailboxService } from './mailbox.service';
 import { EmailSyncService } from './providers/email-sync.service';
 import { GmailService } from './providers/gmail.service';
+import { SnoozeWakeupService } from './providers/snooze-wakeup.service';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { GmailService } from './providers/gmail.service';
     AttachmentService,
     GmailService,
     EmailSyncService,
+    SnoozeWakeupService,
   ],
   exports: [MailboxService, EmailService, AttachmentService],
 })

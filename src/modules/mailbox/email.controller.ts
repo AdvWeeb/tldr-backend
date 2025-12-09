@@ -164,6 +164,7 @@ export class EmailController {
       taskStatus: email.taskStatus,
       taskDeadline: email.taskDeadline,
       isPinned: email.isPinned,
+      isSnoozed: email.isSnoozed,
       snoozedUntil: email.snoozedUntil,
       aiSummary: email.aiSummary,
       aiActionItems: email.aiActionItems,

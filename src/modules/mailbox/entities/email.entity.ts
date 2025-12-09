@@ -33,6 +33,7 @@ export enum TaskStatus {
 @Index(['mailboxId', 'receivedAt'])
 @Index(['mailboxId', 'isRead'])
 @Index(['mailboxId', 'category'])
+@Index(['isSnoozed', 'snoozedUntil'])
 export class Email {
   @ApiProperty({
     description: 'Email unique identifier',
@@ -194,7 +195,14 @@ export class Email {
   isPinned: boolean;
 
   @ApiProperty({
-    description: 'Snooze until timestamp',
+    description: 'Whether the email is currently snoozed',
+    example: false,
+  })
+  @Column({ default: false })
+  isSnoozed: boolean;
+
+  @ApiProperty({
+    description: 'Snooze until timestamp (wake up time)',
     example: '2024-01-02T09:00:00.000Z',
   })
   @Column({ type: 'timestamp with time zone', nullable: true })

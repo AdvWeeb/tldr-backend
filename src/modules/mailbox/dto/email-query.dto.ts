@@ -76,6 +76,12 @@ export class EmailQueryDto {
   @IsOptional()
   label?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by snoozed status' })
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  @IsOptional()
+  isSnoozed?: boolean;
+
   @ApiPropertyOptional({
     description: 'Sort field',
     enum: ['receivedAt', 'subject', 'fromEmail'],

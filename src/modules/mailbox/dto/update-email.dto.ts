@@ -28,8 +28,10 @@ export class UpdateEmailDto {
   @IsOptional()
   taskDeadline?: string;
 
-  @ApiPropertyOptional({ description: 'Snooze until timestamp' })
+  @ApiPropertyOptional({
+    description: 'Snooze until timestamp (set null to clear snooze)',
+  })
   @IsDateString()
   @IsOptional()
-  snoozedUntil?: string;
+  snoozedUntil?: string | null;
 }

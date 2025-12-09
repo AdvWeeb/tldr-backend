@@ -47,6 +47,9 @@ export class EmailSummaryDto {
   @ApiProperty({ example: false })
   isPinned: boolean;
 
+  @ApiProperty({ example: false })
+  isSnoozed: boolean;
+
   @ApiPropertyOptional({ example: '2024-01-02T09:00:00.000Z' })
   snoozedUntil: Date | null;
 }

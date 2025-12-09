@@ -109,6 +109,12 @@ export class EmailService {
       qb.andWhere(':label = ANY(email.labels)', { label: query.label });
     }
 
+    if (query.isSnoozed !== undefined) {
+      qb.andWhere('email.isSnoozed = :isSnoozed', {
+        isSnoozed: query.isSnoozed,
+      });
+    }
+
     const sortField = `email.${query.sortBy || 'receivedAt'}`;
     qb.orderBy(sortField, query.sortOrder || 'DESC');
 
@@ -171,7 +177,13 @@ export class EmailService {
       email.taskDeadline = new Date(updateDto.taskDeadline);
     }
     if (updateDto.snoozedUntil !== undefined) {
-      email.snoozedUntil = new Date(updateDto.snoozedUntil);
+      if (updateDto.snoozedUntil === null) {
+        email.isSnoozed = false;
+        email.snoozedUntil = null;
+      } else {
+        email.isSnoozed = true;
+        email.snoozedUntil = new Date(updateDto.snoozedUntil);
+      }
     }
 
     await this.emailRepository.save(email);
@@ -225,6 +237,7 @@ export class EmailService {
       category: email.category,
       taskStatus: email.taskStatus,
       isPinned: email.isPinned,
+      isSnoozed: email.isSnoozed,
       snoozedUntil: email.snoozedUntil,
     };
   }
