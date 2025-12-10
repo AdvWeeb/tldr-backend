@@ -242,6 +242,7 @@ export class EmailService {
       isPinned: email.isPinned,
       isSnoozed: email.isSnoozed,
       snoozedUntil: email.snoozedUntil,
+      aiSummary: email.aiSummary,
     };
   }
 

@@ -52,6 +52,12 @@ export class EmailSummaryDto {
 
   @ApiPropertyOptional({ example: '2024-01-02T09:00:00.000Z' })
   snoozedUntil: Date | null;
+
+  @ApiPropertyOptional({
+    example:
+      'This email discusses the upcoming project deadline and requests your feedback on the proposal.',
+  })
+  aiSummary: string | null;
 }
 
 export class AttachmentSummaryDto {
@@ -89,9 +95,6 @@ export class EmailDetailDto extends EmailSummaryDto {
 
   @ApiPropertyOptional({ example: '2024-01-15T17:00:00.000Z' })
   taskDeadline: Date | null;
-
-  @ApiPropertyOptional()
-  aiSummary: string | null;
 
   @ApiPropertyOptional()
   aiActionItems: Record<string, unknown>[] | null;
