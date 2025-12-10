@@ -1,6 +1,40 @@
 # TL;DR Backend
 
-Backend service for the **TL;DR** platform
+Backend service for the **TL;DR** email management platform with Gmail integration, AI-powered features, and intelligent email workflows.
+
+---
+
+## ✨ Key Features
+
+### Email Management
+
+- **Gmail API Integration**: Full Gmail API support for reading, sending, and managing emails
+- **OAuth 2.0 with PKCE**: Secure Google authentication with encrypted token storage
+- **Email Synchronization**: Real-time email sync with Gmail History API
+- **Background Jobs**: Automated cron jobs for periodic synchronization
+- **Email Threading**: Proper threading with In-Reply-To and References headers
+- **Attachment Support**: Full attachment metadata and download capabilities
+
+### AI-Powered Features
+
+- **Email Summarization**: AI-generated summaries using Gemini API
+- **Smart Insights**: Automatic summary generation for incoming emails
+- **Bulk Summarization**: Efficiently summarize multiple emails
+
+### Workflow Management
+
+- **Task Status Tracking**: 4-state workflow (none, todo, in_progress, done)
+- **Email Snooze**: Snooze emails with custom timestamps
+- **Auto Wake-up**: Cron job automatically unsnoozes emails when time expires
+- **Email Categories**: Gmail category support (primary, social, promotions, etc.)
+
+### Security & Performance
+
+- **AES-256-GCM Encryption**: Encrypted OAuth token storage
+- **JWT Authentication**: Secure access and refresh token management
+- **Rate Limiting**: ThrottleGuard with configurable limits
+- **Database Indexing**: Optimized queries with strategic indexes
+- **Pagination**: Efficient cursor-based pagination
 
 ---
 
@@ -23,7 +57,37 @@ cp env.example .env
 
 #### 3. Update .env with your values
 
-Edit `.env` to configure database, Redis, and other environment-specific settings.
+Edit `.env` to configure database, Redis, Google OAuth, and AI service settings:
+
+```env
+# Database
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+DATABASE_USERNAME=postgres
+DATABASE_PASSWORD=your_password
+DATABASE_NAME=tldr_email
+
+# JWT
+JWT_SECRET=your-super-secret-jwt-key-change-this
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_SECRET=your-super-secret-refresh-key-change-this
+JWT_REFRESH_EXPIRES_IN=7d
+
+# Google OAuth
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:3000/auth/google/callback
+
+# Gemini AI (for email summarization)
+GEMINI_API_KEY=your-gemini-api-key
+
+# Encryption (for OAuth tokens)
+ENCRYPTION_KEY=your-32-character-encryption-key-here
+
+# App
+PORT=3000
+NODE_ENV=development
+```
 
 #### 4. Start infrastructure
 
@@ -98,6 +162,7 @@ npm run typeorm:run
 # Revert the last migration
 npm run typeorm:revert
 ```
+
 ---
 
 ## Development Guidelines
