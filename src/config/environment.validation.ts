@@ -31,4 +31,6 @@ export default Joi.object({
   MAIL_HOST: Joi.string().required(),
   SMTP_USERNAME: Joi.string().required(),
   SMTP_PASSWORD: Joi.string().required(),
+  // AI/LLM Configuration
+  GEMINI_API_KEY: Joi.string().required(),
 });

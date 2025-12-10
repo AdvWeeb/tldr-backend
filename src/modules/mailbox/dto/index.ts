@@ -13,4 +13,5 @@ export {
   MailboxResponseDto,
 } from './mailbox-response.dto';
 export { SendEmailDto } from './send-email.dto';
+export { SummarizeEmailResponseDto } from './summarize-email.dto';
 export { UpdateEmailDto } from './update-email.dto';

@@ -25,6 +25,7 @@
     "migration:revert": "npm run build && npm run typeorm migration:revert"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@nestjs/cache-manager": "^3.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",

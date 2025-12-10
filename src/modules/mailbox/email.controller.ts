@@ -28,6 +28,7 @@ import {
   EmailQueryDto,
   PaginatedEmailsDto,
   SendEmailDto,
+  SummarizeEmailResponseDto,
   UpdateEmailDto,
 } from './dto';
 import { EmailService } from './email.service';
@@ -139,6 +140,25 @@ export class EmailController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<void> {
     await this.emailService.softDelete(user.id, id);
+  }
+
+  @Post(':id/summarize')
+  @ApiOperation({ summary: 'Generate AI summary for an email' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({
+    status: HttpStatus.CREATED,
+    description: 'Email summary generated',
+    type: SummarizeEmailResponseDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Email not found',
+  })
+  async summarize(
+    @CurrentUser() user: User,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<SummarizeEmailResponseDto> {
+    return this.emailService.summarizeEmail(user.id, id);
   }
 
   private toDetailDto(email: import('./entities').Email): EmailDetailDto {

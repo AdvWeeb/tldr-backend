@@ -10,6 +10,7 @@ import { EmailService } from './email.service';
 import { Attachment, Email, Mailbox } from './entities';
 import { MailboxController } from './mailbox.controller';
 import { MailboxService } from './mailbox.service';
+import { AiService } from './providers/ai.service';
 import { EmailSyncService } from './providers/email-sync.service';
 import { GmailService } from './providers/gmail.service';
 import { SnoozeWakeupService } from './providers/snooze-wakeup.service';
@@ -28,6 +29,7 @@ import { SnoozeWakeupService } from './providers/snooze-wakeup.service';
     GmailService,
     EmailSyncService,
     SnoozeWakeupService,
+    AiService,
   ],
   exports: [MailboxService, EmailService, AttachmentService],
 })

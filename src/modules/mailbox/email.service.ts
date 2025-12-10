@@ -6,9 +6,11 @@ import {
   EmailSummaryDto,
   PaginatedEmailsDto,
   SendEmailDto,
+  SummarizeEmailResponseDto,
   UpdateEmailDto,
 } from './dto';
 import { Email, Mailbox } from './entities';
+import { AiService } from './providers/ai.service';
 import { GmailService } from './providers/gmail.service';
 
 @Injectable()
@@ -21,6 +23,7 @@ export class EmailService {
     @InjectRepository(Mailbox)
     private readonly mailboxRepository: Repository<Mailbox>,
     private readonly gmailService: GmailService,
+    private readonly aiService: AiService,
   ) {}
 
   async findAll(
@@ -348,5 +351,36 @@ export class EmailService {
     );
 
     return { messageId };
+  }
+
+  async summarizeEmail(
+    userId: number,
+    emailId: number,
+  ): Promise<SummarizeEmailResponseDto> {
+    const email = await this.findOne(userId, emailId);
+
+    // Use bodyText if available, otherwise use snippet
+    const content = email.bodyText || email.snippet || email.subject || '';
+
+    if (!content) {
+      throw new NotFoundException(
+        `Email ${emailId} has no content to summarize`,
+      );
+    }
+
+    // Generate summary using AI service
+    const summary = await this.aiService.summarizeEmail(content);
+
+    // Save summary to database
+    email.aiSummary = summary;
+    await this.emailRepository.save(email);
+
+    this.logger.log(`Generated and saved summary for email ${emailId}`);
+
+    return {
+      emailId,
+      summary,
+      saved: true,
+    };
   }
 }

@@ -10,6 +10,7 @@ import { AppService } from './app.service';
 import appConfig from './config/app.config';
 import databaseConfig from './config/database.config';
 import environmentValidation from './config/environment.validation';
+import geminiConfig from './config/gemini.config';
 import redisConfig from './config/redis.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
@@ -21,7 +22,7 @@ import { UserModule } from './modules/user/user.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [appConfig, databaseConfig, redisConfig],
+      load: [appConfig, databaseConfig, redisConfig, geminiConfig],
       validationSchema: environmentValidation,
       validationOptions: {
         allowUnknown: true,
