@@ -26,6 +26,8 @@ import {
   AttachmentSummaryDto,
   EmailDetailDto,
   EmailQueryDto,
+  FuzzySearchDto,
+  FuzzySearchResponseDto,
   PaginatedEmailsDto,
   SendEmailDto,
   SummarizeEmailResponseDto,
@@ -55,6 +57,26 @@ export class EmailController {
   ): Promise<PaginatedEmailsDto> {
     const baseUrl = `${request.protocol}://${request.get('host')}${request.path}`;
     return this.emailService.findAll(user.id, query, baseUrl);
+  }
+
+  @Get('search/fuzzy')
+  @ApiOperation({
+    summary: 'Fuzzy search emails with typo tolerance and partial matching',
+    description:
+      'Search emails using PostgreSQL pg_trgm for similarity matching. ' +
+      'Supports typos (e.g., "markting" finds "marketing") and partial matches ' +
+      '(e.g., "Nguy" finds "Nguyễn"). Returns results ranked by relevance.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Fuzzy search results with relevance scores',
+    type: FuzzySearchResponseDto,
+  })
+  async fuzzySearch(
+    @CurrentUser() user: User,
+    @Query() searchDto: FuzzySearchDto,
+  ): Promise<FuzzySearchResponseDto> {
+    return this.emailService.fuzzySearch(user.id, searchDto);
   }
 
   @Post('send')
