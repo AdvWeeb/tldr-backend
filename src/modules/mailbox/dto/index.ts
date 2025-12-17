@@ -8,6 +8,12 @@ export {
   PaginationLinksDto,
   PaginationMetaDto,
 } from './email-response.dto';
+export { FuzzySearchDto, FuzzySearchField } from './fuzzy-search.dto';
+export {
+  FuzzySearchMatchDto,
+  FuzzySearchResponseDto,
+  FuzzySearchResultDto,
+} from './fuzzy-search-response.dto';
 export {
   MailboxListResponseDto,
   MailboxResponseDto,

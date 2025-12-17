@@ -20,6 +20,17 @@ Backend service for the **TL;DR** email management platform with Gmail integrati
 - **Email Summarization**: AI-generated summaries using Gemini API
 - **Smart Insights**: Automatic summary generation for incoming emails
 - **Bulk Summarization**: Efficiently summarize multiple emails
+- **Fuzzy Search**: Intelligent search with typo tolerance and partial matching
+
+### Search & Discovery
+
+- **Fuzzy Search Engine**: PostgreSQL pg_trgm-based search with typo tolerance
+  - Example: `"markting"` finds `"marketing"`
+  - Partial matching: `"Nguy"` finds `"Nguyễn Văn A"`
+- **Multi-Field Search**: Search across subject, sender, and body/summary
+- **Relevance Ranking**: Results ordered by combined similarity score
+- **Configurable Thresholds**: Adjust precision vs recall for your needs
+- **[📖 Full Fuzzy Search Documentation](docs/FUZZY_SEARCH.md)**
 
 ### Workflow Management
 
