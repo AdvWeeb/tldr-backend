@@ -9,6 +9,7 @@ import {
   Mailbox,
   MailboxSyncStatus,
 } from '../entities';
+import { AiService } from './ai.service';
 import { GmailService, ParsedEmail } from './gmail.service';
 
 interface SyncJob {
@@ -35,6 +36,7 @@ export class EmailSyncService implements OnModuleInit {
     @InjectRepository(Attachment)
     private readonly attachmentRepository: Repository<Attachment>,
     private readonly gmailService: GmailService,
+    private readonly aiService: AiService,
   ) {}
 
   onModuleInit() {
@@ -327,6 +329,8 @@ export class EmailSyncService implements OnModuleInit {
       category: this.categorizeEmail(parsedEmail.labels),
     };
 
+    const isNewEmail = !email;
+
     if (email) {
       await this.emailRepository.update(email.id, emailData);
     } else {
@@ -346,6 +350,11 @@ export class EmailSyncService implements OnModuleInit {
           }),
         );
         await this.attachmentRepository.save(attachments);
+      }
+
+      // Generate embedding for new email asynchronously
+      if (isNewEmail && email) {
+        this.generateEmbeddingAsync(email.id);
       }
     }
 
@@ -372,6 +381,46 @@ export class EmailSyncService implements OnModuleInit {
     await this.mailboxRepository.update(mailboxId, {
       unreadCount,
       totalEmails,
+    });
+  }
+
+  /**
+   * Generate embedding for an email asynchronously
+   * Does not block the sync process
+   */
+  private generateEmbeddingAsync(emailId: number): void {
+    setImmediate(() => {
+      void (async () => {
+        try {
+          const email = await this.emailRepository.findOne({
+            where: { id: emailId },
+          });
+
+          if (!email) {
+            this.logger.warn(
+              `Email ${emailId} not found for embedding generation`,
+            );
+            return;
+          }
+
+          const content = this.aiService.prepareEmailContentForEmbedding(email);
+          const embedding = await this.aiService.generateEmbedding(content);
+
+          // Use raw SQL to update embedding since it's not managed by @Column decorator
+          const vectorString = `[${embedding.join(',')}]`;
+          await this.emailRepository.query(
+            `UPDATE emails SET embedding = $1::vector, "embeddingGeneratedAt" = $2 WHERE id = $3`,
+            [vectorString, new Date(), emailId],
+          );
+
+          this.logger.log(`Generated embedding for email ${emailId}`);
+        } catch (error) {
+          this.logger.error(
+            `Failed to generate embedding for email ${emailId}`,
+            error instanceof Error ? error.stack : String(error),
+          );
+        }
+      })();
     });
   }
 

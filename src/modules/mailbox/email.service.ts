@@ -9,11 +9,14 @@ import {
   FuzzySearchResponseDto,
   FuzzySearchResultDto,
   PaginatedEmailsDto,
+  SemanticSearchDto,
+  SemanticSearchResponseDto,
+  SemanticSearchResultDto,
   SendEmailDto,
   SummarizeEmailResponseDto,
   UpdateEmailDto,
 } from './dto';
-import { Email, Mailbox } from './entities';
+import { ColumnConfig, Email, Mailbox } from './entities';
 import { AiService } from './providers/ai.service';
 import { GmailService } from './providers/gmail.service';
 
@@ -26,6 +29,8 @@ export class EmailService {
     private readonly emailRepository: Repository<Email>,
     @InjectRepository(Mailbox)
     private readonly mailboxRepository: Repository<Mailbox>,
+    @InjectRepository(ColumnConfig)
+    private readonly columnConfigRepository: Repository<ColumnConfig>,
     private readonly gmailService: GmailService,
     private readonly aiService: AiService,
   ) {}
@@ -670,6 +675,352 @@ export class EmailService {
         limit,
         totalPages,
       },
+    };
+  }
+
+  /**
+   * Semantic search using vector similarity
+   * Finds emails by conceptual relevance, not just keyword matching
+   */
+  async semanticSearch(
+    userId: number,
+    searchDto: SemanticSearchDto,
+  ): Promise<SemanticSearchResponseDto> {
+    const {
+      q,
+      mailboxId,
+      page = 1,
+      limit = 20,
+      minSimilarity = 0.5, // Cosine similarity threshold (0-1, lowered for better recall)
+    } = searchDto;
+
+    const userMailboxIds = await this.getUserMailboxIds(userId);
+
+    if (userMailboxIds.length === 0 || !q.trim()) {
+      return {
+        data: [],
+        meta: {
+          query: q,
+          minSimilarity,
+          totalResults: 0,
+          page,
+          limit,
+          totalPages: 0,
+        },
+      };
+    }
+
+    // Generate embedding for search query
+    const queryContent = this.aiService.prepareEmailContentForEmbedding({
+      subject: q,
+      bodyText: q,
+    });
+    const queryEmbedding = await this.aiService.generateEmbedding(queryContent);
+
+    // Convert embedding array to PostgreSQL vector string
+    const vectorString = `[${queryEmbedding.join(',')}]`;
+
+    const skip = (page - 1) * limit;
+
+    // Build semantic search query using cosine similarity
+    const query = `
+      SELECT 
+        email.*,
+        1 - (email.embedding <=> $1::vector) as similarity
+      FROM emails email
+      WHERE email."mailboxId" = ANY($2)
+        AND email."deletedAt" IS NULL
+        AND email.embedding IS NOT NULL
+        ${mailboxId ? 'AND email."mailboxId" = $3' : ''}
+        AND (1 - (email.embedding <=> $1::vector)) >= $${mailboxId ? 4 : 3}
+      ORDER BY similarity DESC
+      LIMIT $${mailboxId ? 5 : 4} 
+      OFFSET $${mailboxId ? 6 : 5}
+    `;
+
+    const params: any[] = [
+      vectorString,
+      userMailboxIds,
+      ...(mailboxId ? [mailboxId] : []),
+      minSimilarity,
+      limit,
+      skip,
+    ];
+
+    type EmailSearchResult = Email & { similarity: string };
+
+    // Truyền kiểu vào hàm query
+    const results = await this.emailRepository.query<EmailSearchResult[]>(
+      query,
+      params,
+    );
+
+    // Get total count
+    const countQuery = `
+      SELECT COUNT(*) as total
+      FROM emails email
+      WHERE email."mailboxId" = ANY($1)
+        AND email."deletedAt" IS NULL
+        AND email.embedding IS NOT NULL
+        ${mailboxId ? 'AND email."mailboxId" = $2' : ''}
+        AND (1 - (email.embedding <=> $3::vector)) >= $${mailboxId ? 4 : 3}
+    `;
+
+    const countParams: (number[] | number | string)[] = [
+      userMailboxIds,
+      ...(mailboxId ? [mailboxId] : []),
+      vectorString,
+      minSimilarity,
+    ];
+
+    interface CountResult {
+      total: string;
+    }
+    const countResult = await this.emailRepository.query<CountResult[]>(
+      countQuery,
+      countParams,
+    );
+
+    const totalResults = parseInt(countResult[0].total, 10);
+    const totalPages = Math.ceil(totalResults / limit);
+
+    // Transform results
+    const data: SemanticSearchResultDto[] = results.map((result) => ({
+      ...this.toSummaryDto(result),
+      similarity: parseFloat(result.similarity),
+    }));
+
+    this.logger.log(
+      `Semantic search for "${q}" returned ${data.length} results (${totalResults} total)`,
+    );
+
+    return {
+      data,
+      meta: {
+        query: q,
+        minSimilarity,
+        totalResults,
+        page,
+        limit,
+        totalPages,
+      },
+    };
+  }
+
+  /**
+   * Generate and store embedding for an email
+   */
+  async generateEmailEmbedding(emailId: number): Promise<void> {
+    const email = await this.emailRepository.findOne({
+      where: { id: emailId },
+    });
+
+    if (!email) {
+      throw new NotFoundException(`Email ${emailId} not found`);
+    }
+
+    const content = this.aiService.prepareEmailContentForEmbedding(email);
+    const embedding = await this.aiService.generateEmbedding(content);
+
+    // Use raw SQL to update embedding since it's not managed by @Column decorator
+    const vectorString = `[${embedding.join(',')}]`;
+    await this.emailRepository.query(
+      `UPDATE emails SET embedding = $1::vector, "embeddingGeneratedAt" = $2 WHERE id = $3`,
+      [vectorString, new Date(), emailId],
+    );
+
+    this.logger.log(`Generated embedding for email ${emailId}`);
+  }
+
+  /**
+   * Batch generate embeddings for emails without them
+   */
+  async generateMissingEmbeddings(
+    userId: number,
+    limit: number = 50,
+  ): Promise<number> {
+    const userMailboxIds = await this.getUserMailboxIds(userId);
+
+    if (userMailboxIds.length === 0) {
+      return 0;
+    }
+
+    // Use raw SQL for embedding column since it's not managed by TypeORM's @Column decorator
+    const emails = await this.emailRepository
+      .createQueryBuilder('email')
+      .where('email.mailboxId IN (:...mailboxIds)', {
+        mailboxIds: userMailboxIds,
+      })
+      .andWhere('email.embedding IS NULL')
+      .andWhere('email.deletedAt IS NULL')
+      .orderBy('email.receivedAt', 'DESC')
+      .limit(limit)
+      .getMany();
+
+    let count = 0;
+    for (const email of emails) {
+      try {
+        await this.generateEmailEmbedding(email.id);
+        count++;
+      } catch (error) {
+        this.logger.error(
+          `Failed to generate embedding for email ${email.id}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+      }
+    }
+
+    this.logger.log(`Generated ${count}/${emails.length} embeddings`);
+    return count;
+  }
+
+  /**
+   * Move an email to a Kanban column and sync Gmail labels
+   */
+  async moveEmailToColumn(
+    userId: number,
+    emailId: number,
+    columnId: number,
+    archiveFromInbox: boolean,
+  ): Promise<void> {
+    // Verify user owns the email
+    const email = await this.findOne(userId, emailId);
+
+    if (!email) {
+      throw new NotFoundException(`Email ${emailId} not found`);
+    }
+
+    // Verify column exists and belongs to user
+    const column = await this.columnConfigRepository.findOne({
+      where: { id: columnId, userId },
+    });
+
+    if (!column) {
+      throw new NotFoundException(`Column ${columnId} not found`);
+    }
+
+    // Get the mailbox
+    const mailbox = await this.mailboxRepository.findOne({
+      where: { id: email.mailboxId, userId },
+    });
+
+    if (!mailbox) {
+      throw new NotFoundException(`Mailbox not found`);
+    }
+
+    // Prepare label changes
+    const addLabelIds: string[] = [];
+    const removeLabelIds: string[] = [];
+
+    // Add the column's Gmail label if specified
+    if (column.gmailLabelId) {
+      addLabelIds.push(column.gmailLabelId);
+    }
+
+    // Optionally remove INBOX label to archive
+    if (archiveFromInbox) {
+      removeLabelIds.push('INBOX');
+    }
+
+    // Sync with Gmail if there are label changes
+    if (addLabelIds.length > 0 || removeLabelIds.length > 0) {
+      try {
+        await this.gmailService.modifyMessageLabels(
+          mailbox,
+          email.gmailMessageId,
+          {
+            addLabelIds,
+            removeLabelIds,
+          },
+        );
+
+        this.logger.log(
+          `Moved email ${emailId} to column "${column.title}" and synced Gmail labels`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to sync Gmail labels for email ${emailId}`,
+          error instanceof Error ? error.stack : String(error),
+        );
+        throw new Error('Failed to synchronize with Gmail');
+      }
+    }
+  }
+
+  /**
+   * Get search suggestions for auto-complete
+   * Returns frequent contacts, keywords from subjects, and recent searches
+   */
+  async getSearchSuggestions(
+    userId: number,
+    query: string,
+  ): Promise<{
+    contacts: string[];
+    keywords: string[];
+    recentSearches: string[];
+  }> {
+    const userMailboxIds = await this.getUserMailboxIds(userId);
+
+    if (userMailboxIds.length === 0) {
+      return { contacts: [], keywords: [], recentSearches: [] };
+    }
+
+    const searchPattern = query ? `%${query.toLowerCase()}%` : '%';
+
+    // Get top contacts (from emails)
+    const contactsQuery = `
+      SELECT DISTINCT
+        COALESCE(NULLIF("fromName", ''), "fromEmail") as contact
+      FROM emails
+      WHERE "mailboxId" = ANY($1)
+        AND "deletedAt" IS NULL
+        AND (
+          LOWER("fromName") LIKE $2 
+          OR LOWER("fromEmail") LIKE $2
+        )
+      ORDER BY contact
+      LIMIT 10
+    `;
+
+    interface ContactResult {
+      contact: string;
+    }
+    const contacts = await this.emailRepository.query<ContactResult[]>(
+      contactsQuery,
+      [userMailboxIds, searchPattern],
+    );
+
+    // Get common keywords from subjects
+    const keywordsQuery = `
+      SELECT DISTINCT
+        LOWER(regexp_split_to_table(subject, E'\\\\s+')) as keyword
+      FROM emails
+      WHERE "mailboxId" = ANY($1)
+        AND "deletedAt" IS NULL
+        AND subject IS NOT NULL
+        AND LENGTH(regexp_split_to_table(subject, E'\\\\s+')) > 3
+        AND LOWER(regexp_split_to_table(subject, E'\\\\s+')) LIKE $2
+      GROUP BY keyword
+      ORDER BY COUNT(*) DESC
+      LIMIT 10
+    `;
+
+    interface KeywordResult {
+      keyword: string;
+    }
+    const keywords = await this.emailRepository.query<KeywordResult[]>(
+      keywordsQuery,
+      [userMailboxIds, searchPattern],
+    );
+
+    return {
+      contacts: contacts
+        .map((c) => c.contact)
+        .filter((contact): contact is string => Boolean(contact)),
+      keywords: keywords
+        .map((k) => k.keyword)
+        .filter((keyword): keyword is string => Boolean(keyword)),
+      recentSearches: [], // Could be implemented with a search history table
     };
   }
 }

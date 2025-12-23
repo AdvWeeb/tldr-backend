@@ -234,4 +234,9 @@ export class Email {
 
   @OneToMany('Attachment', 'email')
   attachments: import('./attachment.entity').Attachment[];
+
+  embedding?: number[] | Buffer | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  embeddingGeneratedAt: Date | null;
 }
