@@ -46,6 +46,55 @@ Summary:`;
     }
   }
 
+  /**
+   * Generate embedding vector for email content
+   * Uses Gemini text-embedding-004 model (768 dimensions)
+   */
+  async generateEmbedding(content: string): Promise<number[]> {
+    try {
+      const model = this.genAI.getGenerativeModel({
+        model: 'text-embedding-004',
+      });
+
+      const result = await model.embedContent(content);
+      const embedding = result.embedding.values;
+
+      this.logger.log(`Generated embedding (${embedding.length} dimensions)`);
+      return embedding;
+    } catch (error) {
+      this.logger.error(
+        'Failed to generate embedding',
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Prepare email content for embedding
+   * Combines subject, body, and sender info
+   */
+  prepareEmailContentForEmbedding(email: {
+    subject?: string | null;
+    bodyText?: string | null;
+    fromName?: string | null;
+    fromEmail?: string | null;
+  }): string {
+    const parts: string[] = [];
+
+    if (email.subject) parts.push(`Subject: ${email.subject}`);
+    if (email.fromName || email.fromEmail) {
+      parts.push(`From: ${email.fromName || email.fromEmail}`);
+    }
+    if (email.bodyText) {
+      // Truncate body to first 2000 chars to stay within token limits
+      const bodySnippet = email.bodyText.substring(0, 2000);
+      parts.push(`Content: ${bodySnippet}`);
+    }
+
+    return parts.join('\n');
+  }
+
   async extractActionItems(emailContent: string): Promise<string[]> {
     try {
       const model = this.genAI.getGenerativeModel({ model: this.model });

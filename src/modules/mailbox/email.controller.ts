@@ -28,10 +28,13 @@ import {
   EmailQueryDto,
   FuzzySearchDto,
   FuzzySearchResponseDto,
+  MoveEmailToColumnDto,
   PaginatedEmailsDto,
   SendEmailDto,
   SummarizeEmailResponseDto,
   UpdateEmailDto,
+  SemanticSearchDto,
+  SemanticSearchResponseDto,
 } from './dto';
 import { EmailService } from './email.service';
 
@@ -181,6 +184,113 @@ export class EmailController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<SummarizeEmailResponseDto> {
     return this.emailService.summarizeEmail(user.id, id);
+  }
+
+  @Get('search/semantic')
+  @ApiOperation({
+    summary: 'Semantic search using vector embeddings',
+    description:
+      'Search emails by conceptual meaning rather than exact keywords. ' +
+      'Example: "money" finds emails about "invoice", "salary", "price".',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Semantic search results with similarity scores',
+    type: SemanticSearchResponseDto,
+  })
+  async semanticSearch(
+    @CurrentUser() user: User,
+    @Query() searchDto: SemanticSearchDto,
+  ): Promise<SemanticSearchResponseDto> {
+    return this.emailService.semanticSearch(user.id, searchDto);
+  }
+
+  @Get('search/suggestions')
+  @ApiOperation({
+    summary: 'Get search suggestions for auto-complete',
+    description:
+      'Returns suggestions based on frequent contacts, keywords, and subjects. ' +
+      'Used for type-ahead/auto-complete in the search bar.',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Search suggestions',
+  })
+  async getSearchSuggestions(
+    @CurrentUser() user: User,
+    @Query('q') query?: string,
+  ): Promise<{
+    contacts: string[];
+    keywords: string[];
+    recentSearches: string[];
+  }> {
+    return this.emailService.getSearchSuggestions(user.id, query || '');
+  }
+
+  @Post(':id/generate-embedding')
+  @ApiOperation({
+    summary: 'Generate embedding for a specific email',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Embedding generated successfully',
+  })
+  async generateEmbedding(
+    @CurrentUser() user: User,
+    @Param('id') id: number,
+  ): Promise<{ message: string }> {
+    const email = await this.emailService.findOne(user.id, id);
+    await this.emailService.generateEmailEmbedding(email.id);
+    return { message: 'Embedding generated successfully' };
+  }
+
+  @Post('generate-embeddings')
+  @ApiOperation({
+    summary: 'Batch generate embeddings for emails without them',
+  })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Number of embeddings generated',
+  })
+  async generateMissingEmbeddings(
+    @CurrentUser() user: User,
+    @Query('limit', new ParseIntPipe({ optional: true })) limit?: number,
+  ): Promise<{ generated: number }> {
+    const generated = await this.emailService.generateMissingEmbeddings(
+      user.id,
+      limit || 50,
+    );
+    return { generated };
+  }
+
+  @Post(':id/move-to-column')
+  @ApiOperation({
+    summary: 'Move email to a Kanban column',
+    description:
+      'Moves an email to a specified column and syncs the associated Gmail label. ' +
+      'Optionally archives the email by removing the INBOX label.',
+  })
+  @ApiParam({ name: 'id', description: 'Email ID' })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Email moved successfully and Gmail labels synchronized',
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Email or column not found',
+  })
+  async moveEmailToColumn(
+    @CurrentUser() user: User,
+    @Param('id', ParseIntPipe) emailId: number,
+    @Body() moveDto: MoveEmailToColumnDto,
+  ): Promise<{ message: string }> {
+    await this.emailService.moveEmailToColumn(
+      user.id,
+      emailId,
+      moveDto.columnId,
+      moveDto.archiveFromInbox || false,
+    );
+    return { message: 'Email moved and Gmail labels synchronized' };
   }
 
   private toDetailDto(email: import('./entities').Email): EmailDetailDto {

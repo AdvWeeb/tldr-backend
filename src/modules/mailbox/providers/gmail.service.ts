@@ -516,4 +516,93 @@ export class GmailService {
 
     return response.data.id;
   }
+
+  /**
+   * Modify labels on a Gmail message
+   * @param mailbox - The mailbox to operate on
+   * @param messageId - Gmail message ID
+   * @param addLabelIds - Array of label IDs to add
+   * @param removeLabelIds - Array of label IDs to remove
+   */
+  async modifyMessageLabels(
+    mailbox: Mailbox,
+    messageId: string,
+    options: {
+      addLabelIds?: string[];
+      removeLabelIds?: string[];
+    },
+  ): Promise<void> {
+    const { gmail } = this.getAuthenticatedClient(mailbox);
+
+    if (!options.addLabelIds?.length && !options.removeLabelIds?.length) {
+      return; // Nothing to do
+    }
+
+    try {
+      await gmail.users.messages.modify({
+        userId: 'me',
+        id: messageId,
+        requestBody: {
+          addLabelIds: options.addLabelIds || [],
+          removeLabelIds: options.removeLabelIds || [],
+        },
+      });
+
+      this.logger.log(
+        `Modified labels for message ${messageId}: +[${options.addLabelIds?.join(', ') || 'none'}] -[${options.removeLabelIds?.join(', ') || 'none'}]`,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to modify labels for message ${messageId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Add a label to a Gmail message
+   */
+  async addLabelToMessage(
+    mailbox: Mailbox,
+    messageId: string,
+    labelId: string,
+  ): Promise<void> {
+    await this.modifyMessageLabels(mailbox, messageId, {
+      addLabelIds: [labelId],
+    });
+  }
+
+  /**
+   * Remove a label from a Gmail message
+   */
+  async removeLabelFromMessage(
+    mailbox: Mailbox,
+    messageId: string,
+    labelId: string,
+  ): Promise<void> {
+    await this.modifyMessageLabels(mailbox, messageId, {
+      removeLabelIds: [labelId],
+    });
+  }
+
+  /**
+   * Archive a message (remove INBOX label)
+   */
+  async archiveMessage(mailbox: Mailbox, messageId: string): Promise<void> {
+    await this.removeLabelFromMessage(mailbox, messageId, 'INBOX');
+  }
+
+  /**
+   * List user's Gmail labels
+   */
+  async listLabels(mailbox: Mailbox): Promise<gmail_v1.Schema$Label[]> {
+    const { gmail } = this.getAuthenticatedClient(mailbox);
+
+    const response = await gmail.users.labels.list({
+      userId: 'me',
+    });
+
+    return response.data.labels || [];
+  }
 }
