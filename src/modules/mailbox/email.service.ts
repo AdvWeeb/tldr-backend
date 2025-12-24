@@ -937,6 +937,21 @@ export class EmailService {
         this.logger.log(
           `Moved email ${emailId} to column "${column.title}" and synced Gmail labels`,
         );
+
+        // Update local email entity to reflect label changes immediately
+        const currentLabels = email.labels || [];
+        const updatedLabels = [
+          ...new Set([
+            ...currentLabels.filter((l) => !removeLabelIds.includes(l)),
+            ...addLabelIds,
+          ]),
+        ];
+
+        await this.emailRepository.update(email.id, {
+          labels: updatedLabels,
+          isStarred: updatedLabels.includes('STARRED'),
+          isRead: !updatedLabels.includes('UNREAD'),
+        });
       } catch (error) {
         this.logger.error(
           `Failed to sync Gmail labels for email ${emailId}`,
@@ -990,18 +1005,20 @@ export class EmailService {
       [userMailboxIds, searchPattern],
     );
 
-    // Get common keywords from subjects
+    // Get top keywords (from subjects)
     const keywordsQuery = `
-      SELECT DISTINCT
-        LOWER(regexp_split_to_table(subject, E'\\\\s+')) as keyword
-      FROM emails
-      WHERE "mailboxId" = ANY($1)
-        AND "deletedAt" IS NULL
-        AND subject IS NOT NULL
-        AND LENGTH(regexp_split_to_table(subject, E'\\\\s+')) > 3
-        AND LOWER(regexp_split_to_table(subject, E'\\\\s+')) LIKE $2
+      SELECT keyword, COUNT(*) as frequency
+      FROM (
+        SELECT LOWER(regexp_split_to_table(subject, E'\\\\s+')) as keyword
+        FROM emails
+        WHERE "mailboxId" = ANY($1)
+          AND "deletedAt" IS NULL
+          AND subject IS NOT NULL
+      ) s
+      WHERE LENGTH(keyword) > 3
+        AND keyword LIKE $2
       GROUP BY keyword
-      ORDER BY COUNT(*) DESC
+      ORDER BY frequency DESC
       LIMIT 10
     `;
 
