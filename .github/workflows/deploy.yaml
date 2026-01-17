@@ -1,0 +1,51 @@
+name: Deploy API to VPS via SSH
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Copy files to VPS via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_PUBLIC_DNS }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          source: "./"
+          target: "/home/ubuntu/apps/tldr-backend"
+          strip_components: 1
+          overwrite: true
+          rm: true
+
+      - name: Deploy on VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_PUBLIC_DNS }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
+          script: |
+            cd /home/ubuntu/apps/tldr-backend
+            
+            if [ ! -f .env ]; then
+              echo "Error: .env file not found in /home/ubuntu/apps/tldr-backend"
+              echo "Please create a .env file on the server before deploying"
+              exit 1
+            fi
+            
+            echo ".env file found, starting deployment..."
+            echo "Stopping existing containers..."
+            docker compose down || true
+            
+            echo "Building and starting containers..."
+            docker compose up -d --build --remove-orphans
+            
+            echo "Deployment complete!"
+            docker compose ps
