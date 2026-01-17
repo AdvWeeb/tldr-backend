@@ -288,6 +288,7 @@ export class EmailController {
       user.id,
       emailId,
       moveDto.columnId,
+      moveDto.sourceColumnId,
       moveDto.archiveFromInbox || false,
     );
     return { message: 'Email moved and Gmail labels synchronized' };

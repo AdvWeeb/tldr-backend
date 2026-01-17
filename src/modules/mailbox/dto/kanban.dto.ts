@@ -130,6 +130,15 @@ export class MoveEmailToColumnDto {
   columnId: number;
 
   @ApiPropertyOptional({
+    description: 'Source column ID (to remove its Gmail label)',
+    example: 2,
+  })
+  @IsInt()
+  @IsOptional()
+  @Min(1)
+  sourceColumnId?: number;
+
+  @ApiPropertyOptional({
     description: 'Whether to remove INBOX label (archive)',
     example: true,
     default: false,

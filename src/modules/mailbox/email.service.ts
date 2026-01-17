@@ -249,6 +249,7 @@ export class EmailService {
       isRead: email.isRead,
       isStarred: email.isStarred,
       hasAttachments: email.hasAttachments,
+      labels: email.labels,
       category: email.category,
       taskStatus: email.taskStatus,
       isPinned: email.isPinned,
@@ -963,6 +964,7 @@ export class EmailService {
     userId: number,
     emailId: number,
     columnId: number,
+    sourceColumnId: number | undefined,
     archiveFromInbox: boolean,
   ): Promise<void> {
     // Verify user owns the email
@@ -972,13 +974,21 @@ export class EmailService {
       throw new NotFoundException(`Email ${emailId} not found`);
     }
 
-    // Verify column exists and belongs to user
+    // Verify target column exists and belongs to user
     const column = await this.columnConfigRepository.findOne({
       where: { id: columnId, userId },
     });
 
     if (!column) {
       throw new NotFoundException(`Column ${columnId} not found`);
+    }
+
+    // Get source column if provided
+    let sourceColumn: ColumnConfig | null = null;
+    if (sourceColumnId) {
+      sourceColumn = await this.columnConfigRepository.findOne({
+        where: { id: sourceColumnId, userId },
+      });
     }
 
     // Get the mailbox
@@ -994,13 +1004,18 @@ export class EmailService {
     const addLabelIds: string[] = [];
     const removeLabelIds: string[] = [];
 
-    // Add the column's Gmail label if specified
+    // Add the target column's Gmail label if specified
     if (column.gmailLabelId) {
       addLabelIds.push(column.gmailLabelId);
     }
 
+    // Remove source column's Gmail label if specified (and different from target)
+    if (sourceColumn?.gmailLabelId && sourceColumn.gmailLabelId !== column.gmailLabelId) {
+      removeLabelIds.push(sourceColumn.gmailLabelId);
+    }
+
     // Optionally remove INBOX label to archive
-    if (archiveFromInbox) {
+    if (archiveFromInbox && !removeLabelIds.includes('INBOX')) {
       removeLabelIds.push('INBOX');
     }
 

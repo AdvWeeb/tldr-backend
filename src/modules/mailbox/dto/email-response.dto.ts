@@ -38,6 +38,9 @@ export class EmailSummaryDto {
   @ApiProperty({ example: true })
   hasAttachments: boolean;
 
+  @ApiPropertyOptional({ example: ['INBOX', 'IMPORTANT'] })
+  labels: string[] | null;
+
   @ApiProperty({ enum: EmailCategory, example: EmailCategory.PRIMARY })
   category: EmailCategory;
 
@@ -89,9 +92,6 @@ export class EmailDetailDto extends EmailSummaryDto {
 
   @ApiPropertyOptional()
   bodyText: string | null;
-
-  @ApiPropertyOptional({ example: ['INBOX', 'IMPORTANT'] })
-  labels: string[] | null;
 
   @ApiPropertyOptional({ example: '2024-01-15T17:00:00.000Z' })
   taskDeadline: Date | null;
