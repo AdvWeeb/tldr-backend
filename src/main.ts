@@ -44,7 +44,8 @@ async function bootstrap() {
   );
 
   // Swagger setup
-  const config = new DocumentBuilder()
+  const apiUrl = configService.get('appConfig.apiUrl') as string;
+  const configBuilder = new DocumentBuilder()
     .setTitle(
       (configService.get('appConfig.swaggerTitle') as string) || 'TL;DR API',
     )
@@ -55,20 +56,30 @@ async function bootstrap() {
     .setVersion(
       (configService.get('appConfig.swaggerVersion') as string) || '1.0',
     )
-    .addBearerAuth()
-    .build();
+    .addBearerAuth();
+
+  if (apiUrl) {
+    configBuilder.addServer(apiUrl, 'Production Server');
+  }
+  configBuilder.addServer(`http://localhost:${port}`, 'Local Development');
+
+  const config = configBuilder.build();
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document);
 
   const port = (configService.get('appConfig.port') as number) || 3000;
+  const environment =
+    (configService.get('appConfig.environment') as string) || 'production';
 
   // Function to start the application with retry logic for EADDRINUSE
   const startApp = async (retries = 5) => {
     try {
       await app.listen(port);
-      Logger.log(`Application is running on: http://localhost:${port}`);
-      Logger.log(`Swagger documentation: http://localhost:${port}/api/docs`);
+      const baseUrl = apiUrl || `http://localhost:${port}`;
+      Logger.log(`Application is running on: ${baseUrl}`);
+      Logger.log(`Environment: ${environment}`);
+      Logger.log(`Swagger documentation: ${baseUrl}/api/docs`);
     } catch (err: any) {
       if (err.code === 'EADDRINUSE' && retries > 0) {
         Logger.warn(
