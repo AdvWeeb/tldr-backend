@@ -23,7 +23,6 @@ jobs:
           target: "/home/ubuntu/apps/tldr-backend"
           strip_components: 1
           overwrite: true
-          rm: true
 
       - name: Deploy on VPS via SSH
         uses: appleboy/ssh-action@v1.0.3
