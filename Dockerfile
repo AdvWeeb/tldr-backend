@@ -1,15 +1,27 @@
-FROM node:20-alpine
+# Build stage
+FROM node:24-alpine AS build
 
-WORKDIR /app
+WORKDIR /usr/src/app
 
-COPY package*.json ./
+COPY --chown=node:node package*.json ./
 
-RUN npm install
+RUN npm ci
 
-COPY . .
+COPY --chown=node:node . .
 
 RUN npm run build
 
-EXPOSE 8000
+RUN npm prune --production --ignore-scripts
 
-CMD ["npm", "run", "start:prod"] 
+# Production stage
+FROM node:24-alpine AS production
+
+WORKDIR /usr/src/app
+
+COPY --chown=node:node --from=build /usr/src/app/node_modules ./node_modules
+
+COPY --chown=node:node --from=build /usr/src/app/dist ./dist
+
+USER node
+
+CMD ["node", "dist/src/main.js"]
