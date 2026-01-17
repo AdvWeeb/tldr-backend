@@ -33,3 +33,4 @@ export {
 } from './semantic-search-response.dto';
 export { SummarizeEmailResponseDto } from './summarize-email.dto';
 export { UpdateEmailDto } from './update-email.dto';
+export { GmailLabelDto, GmailLabelsResponseDto } from './gmail-label.dto';

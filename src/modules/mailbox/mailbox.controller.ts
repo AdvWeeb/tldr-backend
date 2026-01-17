@@ -20,6 +20,7 @@ import { CurrentUser } from '../auth/decorators';
 import { User } from '../user/entities/user.entity';
 import {
   ConnectMailboxDto,
+  GmailLabelsResponseDto,
   MailboxResponseDto,
   MailboxStatsDto,
 } from './dto';
@@ -126,6 +127,25 @@ export class MailboxController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<MailboxStatsDto> {
     return this.emailService.getMailboxStats(user.id, id);
+  }
+
+  @Get(':id/labels')
+  @ApiOperation({ summary: 'Get Gmail labels for a mailbox' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Gmail labels',
+    type: GmailLabelsResponseDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Mailbox not found',
+  })
+  async getLabels(
+    @CurrentUser() user: User,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<GmailLabelsResponseDto> {
+    return this.mailboxService.getGmailLabels(user.id, id);
   }
 
   @Delete(':id')

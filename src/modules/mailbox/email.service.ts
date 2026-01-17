@@ -124,6 +124,13 @@ export class EmailService {
       });
     }
 
+    if (query.excludeLabel) {
+      qb.andWhere(
+        '(email.labels IS NULL OR NOT :excludeLabel = ANY(string_to_array(email.labels, \',\')))',
+        { excludeLabel: query.excludeLabel },
+      );
+    }
+
     if (query.isSnoozed !== undefined) {
       qb.andWhere('email.isSnoozed = :isSnoozed', {
         isSnoozed: query.isSnoozed,

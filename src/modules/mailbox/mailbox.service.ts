@@ -9,7 +9,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { OAuth2Client } from 'google-auth-library';
 import { IsNull, Repository } from 'typeorm';
 import { EncryptionUtil } from '../../common/utils/encryption.util';
-import { ConnectMailboxDto } from './dto';
+import {
+  ConnectMailboxDto,
+  GmailLabelDto,
+  GmailLabelsResponseDto,
+} from './dto';
 import { Mailbox, MailboxProvider, MailboxSyncStatus } from './entities';
 import { EmailSyncService } from './providers/email-sync.service';
 import { GmailService } from './providers/gmail.service';
@@ -195,5 +199,65 @@ export class MailboxService {
 
     mailbox.isActive = isActive;
     return this.mailboxRepository.save(mailbox);
+  }
+
+  /**
+   * Get Gmail labels for a mailbox
+   */
+  async getGmailLabels(
+    userId: number,
+    mailboxId: number,
+  ): Promise<GmailLabelsResponseDto> {
+    const mailbox = await this.findOneByUser(userId, mailboxId);
+
+    const gmailLabels = await this.gmailService.listLabels(mailbox);
+
+    const systemLabels: GmailLabelDto[] = [];
+    const userLabels: GmailLabelDto[] = [];
+
+    // System labels to include (others are hidden internal labels)
+    const visibleSystemLabels = new Set([
+      'INBOX',
+      'SENT',
+      'DRAFT',
+      'TRASH',
+      'SPAM',
+      'STARRED',
+      'IMPORTANT',
+      'CATEGORY_PERSONAL',
+      'CATEGORY_SOCIAL',
+      'CATEGORY_PROMOTIONS',
+      'CATEGORY_UPDATES',
+      'CATEGORY_FORUMS',
+    ]);
+
+    for (const label of gmailLabels) {
+      if (!label.id || !label.name) continue;
+
+      const labelDto: GmailLabelDto = {
+        id: label.id,
+        name: label.name,
+        type: label.type === 'user' ? 'user' : 'system',
+        messagesTotal: label.messagesTotal ?? undefined,
+        messagesUnread: label.messagesUnread ?? undefined,
+        backgroundColor: label.color?.backgroundColor ?? undefined,
+        textColor: label.color?.textColor ?? undefined,
+      };
+
+      if (label.type === 'user') {
+        userLabels.push(labelDto);
+      } else if (visibleSystemLabels.has(label.id)) {
+        systemLabels.push(labelDto);
+      }
+    }
+
+    // Sort user labels alphabetically
+    userLabels.sort((a, b) => a.name.localeCompare(b.name));
+
+    this.logger.log(
+      `Retrieved ${systemLabels.length} system labels and ${userLabels.length} user labels for mailbox ${mailboxId}`,
+    );
+
+    return { system: systemLabels, user: userLabels };
   }
 }

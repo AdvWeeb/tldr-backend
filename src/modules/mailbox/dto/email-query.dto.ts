@@ -76,6 +76,11 @@ export class EmailQueryDto {
   @IsOptional()
   label?: string;
 
+  @ApiPropertyOptional({ description: 'Exclude emails with this label (for Archive)' })
+  @IsString()
+  @IsOptional()
+  excludeLabel?: string;
+
   @ApiPropertyOptional({ description: 'Filter by snoozed status' })
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
