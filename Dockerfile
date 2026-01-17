@@ -11,7 +11,7 @@ COPY --chown=node:node . .
 
 RUN npm run build
 
-RUN npm prune --production --ignore-scripts
+RUN npm prune --omit=dev --ignore-scripts
 
 # Production stage
 FROM node:24-alpine AS production
