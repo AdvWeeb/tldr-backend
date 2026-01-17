@@ -5,26 +5,38 @@ export class AddVectorSupport1735000000000 implements MigrationInterface {
     // Enable pgvector extension
     await queryRunner.query(`CREATE EXTENSION IF NOT EXISTS vector`);
 
-    // Drop the embedding column if it exists with wrong type (text)
-    // This can happen if TypeORM synchronize mode created it first
-    await queryRunner.query(`
-      DO $$ 
-      BEGIN
-        IF EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'emails' 
-          AND column_name = 'embedding'
-          AND data_type != 'USER-DEFINED'
-        ) THEN
-          ALTER TABLE "emails" DROP COLUMN "embedding";
-        END IF;
-      END $$;
+    // Check if embedding column exists
+    const embeddingColumn = await queryRunner.query(`
+      SELECT column_name, data_type, udt_name
+      FROM information_schema.columns 
+      WHERE table_schema = 'public'
+        AND table_name = 'emails' 
+        AND column_name = 'embedding'
     `);
 
-    // Add embedding column (768 dimensions for Gemini text-embedding-004)
+    if (embeddingColumn.length > 0) {
+      const columnType = embeddingColumn[0].udt_name;
+      // If it exists but is not vector type, drop it
+      if (columnType !== 'vector') {
+        await queryRunner.query(
+          `ALTER TABLE "emails" DROP COLUMN "embedding"`,
+        );
+        // Now add it with correct type
+        await queryRunner.query(
+          `ALTER TABLE "emails" ADD COLUMN "embedding" vector(768)`,
+        );
+      }
+      // If it's already vector type, do nothing
+    } else {
+      // Column doesn't exist, create it
+      await queryRunner.query(
+        `ALTER TABLE "emails" ADD COLUMN "embedding" vector(768)`,
+      );
+    }
+
+    // Add embeddingGeneratedAt if not exists
     await queryRunner.query(`
       ALTER TABLE "emails" 
-      ADD COLUMN IF NOT EXISTS "embedding" vector(768),
       ADD COLUMN IF NOT EXISTS "embeddingGeneratedAt" TIMESTAMP
     `);
 

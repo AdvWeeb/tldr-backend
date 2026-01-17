@@ -235,6 +235,14 @@ export class Email {
   @OneToMany('Attachment', 'email')
   attachments: import('./attachment.entity').Attachment[];
 
+  /**
+   * Vector embedding for semantic search (768 dimensions for Gemini text-embedding-004).
+   * Managed via raw SQL and migrations because:
+   * 1. TypeORM doesn't natively support pgvector's 'vector' type
+   * 2. DO NOT add @Column decorator - it will cause TypeORM synchronize to drop this column
+   * 3. Column is created by migration: 1735000000000-AddVectorSupport.ts
+   * IMPORTANT: DATABASE_SYNC must be false to prevent TypeORM from dropping this column!
+   */
   embedding?: number[] | Buffer | null;
 
   @Column({ type: 'timestamp', nullable: true })

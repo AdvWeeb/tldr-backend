@@ -16,6 +16,7 @@ import { AiService } from './providers/ai.service';
 import { EmailSyncService } from './providers/email-sync.service';
 import { GmailService } from './providers/gmail.service';
 import { SnoozeWakeupService } from './providers/snooze-wakeup.service';
+import { MailboxCron } from './mailbox.cron';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { SnoozeWakeupService } from './providers/snooze-wakeup.service';
     EmailSyncService,
     SnoozeWakeupService,
     AiService,
+    MailboxCron,
   ],
   exports: [MailboxService, EmailService, AttachmentService, KanbanService],
 })

@@ -5,11 +5,11 @@ export class AddIsSnoozedToEmails1733788800000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "emails" ADD "isSnoozed" boolean NOT NULL DEFAULT false`,
+      `ALTER TABLE "emails" ADD COLUMN IF NOT EXISTS "isSnoozed" boolean NOT NULL DEFAULT false`,
     );
 
     await queryRunner.query(
-      `CREATE INDEX "IDX_emails_isSnoozed_snoozedUntil" ON "emails" ("isSnoozed", "snoozedUntil")`,
+      `CREATE INDEX IF NOT EXISTS "IDX_emails_isSnoozed_snoozedUntil" ON "emails" ("isSnoozed", "snoozedUntil")`,
     );
 
     await queryRunner.query(

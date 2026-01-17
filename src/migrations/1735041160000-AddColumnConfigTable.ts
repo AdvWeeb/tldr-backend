@@ -4,7 +4,7 @@ export class AddColumnConfigTable1735041160000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create column_configs table
     await queryRunner.query(`
-      CREATE TABLE "column_configs" (
+      CREATE TABLE IF NOT EXISTS "column_configs" (
         "id" SERIAL PRIMARY KEY,
         "userId" INTEGER NOT NULL,
         "title" VARCHAR(100) NOT NULL,
@@ -19,16 +19,22 @@ export class AddColumnConfigTable1735041160000 implements MigrationInterface {
 
     // Create index for efficient querying by user and order
     await queryRunner.query(`
-      CREATE INDEX "IDX_column_configs_userId_orderIndex" 
+      CREATE INDEX IF NOT EXISTS "IDX_column_configs_userId_orderIndex" 
       ON "column_configs" ("userId", "orderIndex")
     `);
 
     // Add foreign key to users table
+    // Check if constraint exists before adding
     await queryRunner.query(`
-      ALTER TABLE "column_configs"
-      ADD CONSTRAINT "FK_column_configs_userId"
-      FOREIGN KEY ("userId") REFERENCES "users"("id")
-      ON DELETE CASCADE
+      DO $$
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'FK_column_configs_userId') THEN
+          ALTER TABLE "column_configs"
+          ADD CONSTRAINT "FK_column_configs_userId"
+          FOREIGN KEY ("userId") REFERENCES "users"("id")
+          ON DELETE CASCADE;
+        END IF;
+      END $$;
     `);
   }
 
