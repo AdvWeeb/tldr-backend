@@ -613,6 +613,28 @@ export class GmailService {
   }
 
   /**
+   * Move a message to trash
+   */
+  async trashMessage(mailbox: Mailbox, messageId: string): Promise<void> {
+    const { gmail } = this.getAuthenticatedClient(mailbox);
+
+    try {
+      await gmail.users.messages.trash({
+        userId: 'me',
+        id: messageId,
+      });
+
+      this.logger.log(`Moved message ${messageId} to trash`);
+    } catch (error) {
+      this.logger.error(
+        `Failed to trash message ${messageId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw error;
+    }
+  }
+
+  /**
    * List user's Gmail labels
    */
   async listLabels(mailbox: Mailbox): Promise<gmail_v1.Schema$Label[]> {

@@ -214,9 +214,29 @@ export class EmailService {
 
   async softDelete(userId: number, emailId: number): Promise<void> {
     const email = await this.findOne(userId, emailId);
+
+    // Get mailbox to trash in Gmail
+    const mailbox = await this.mailboxRepository.findOne({
+      where: { id: email.mailboxId, userId },
+    });
+
+    // Trash in Gmail first
+    if (mailbox) {
+      try {
+        await this.gmailService.trashMessage(mailbox, email.gmailMessageId);
+      } catch (error) {
+        this.logger.error(
+          `Failed to trash email ${emailId} in Gmail`,
+          error instanceof Error ? error.stack : String(error),
+        );
+        throw new Error('Failed to delete email in Gmail');
+      }
+    }
+
+    // Then soft-delete locally
     await this.emailRepository.softDelete(emailId);
     await this.updateMailboxUnreadCount(email.mailboxId);
-    this.logger.log(`Soft-deleted email ${emailId}`);
+    this.logger.log(`Deleted email ${emailId} (trashed in Gmail)`);
   }
 
   private async getUserMailboxIds(userId: number): Promise<number[]> {
