@@ -8,6 +8,7 @@ import {
   FuzzySearchField,
   FuzzySearchResponseDto,
   FuzzySearchResultDto,
+  MailboxStatsDto,
   PaginatedEmailsDto,
   SemanticSearchDto,
   SemanticSearchResponseDto,
@@ -118,7 +119,9 @@ export class EmailService {
     }
 
     if (query.label) {
-      qb.andWhere(':label = ANY(email.labels)', { label: query.label });
+      qb.andWhere(':label = ANY(string_to_array(email.labels, \',\'))', {
+        label: query.label,
+      });
     }
 
     if (query.isSnoozed !== undefined) {
@@ -391,6 +394,85 @@ export class EmailService {
       emailId,
       summary,
       saved: true,
+    };
+  }
+
+  async getMailboxStats(
+    userId: number,
+    mailboxId: number,
+  ): Promise<MailboxStatsDto> {
+    const userMailboxIds = await this.getUserMailboxIds(userId);
+    if (!userMailboxIds.includes(mailboxId)) {
+      throw new NotFoundException(`Mailbox ${mailboxId} not found`);
+    }
+
+    const stats = await this.emailRepository
+      .createQueryBuilder('email')
+      .select(
+        "COUNT(*) FILTER (WHERE 'INBOX' = ANY(string_to_array(email.labels, ',')))",
+        'inboxTotal',
+      )
+      .addSelect(
+        "COUNT(*) FILTER (WHERE 'INBOX' = ANY(string_to_array(email.labels, ',')) AND email.isRead = false)",
+        'inboxUnread',
+      )
+      .addSelect(
+        'COUNT(*) FILTER (WHERE email.isStarred = true)',
+        'starredTotal',
+      )
+      .addSelect(
+        'COUNT(*) FILTER (WHERE email.isStarred = true AND email.isRead = false)',
+        'starredUnread',
+      )
+      .addSelect(
+        "COUNT(*) FILTER (WHERE 'DRAFT' = ANY(string_to_array(email.labels, ',')))",
+        'draftsTotal',
+      )
+      .addSelect(
+        "COUNT(*) FILTER (WHERE 'SENT' = ANY(string_to_array(email.labels, ',')))",
+        'sentTotal',
+      )
+      .addSelect(
+        "COUNT(*) FILTER (WHERE 'SPAM' = ANY(string_to_array(email.labels, ',')))",
+        'spamTotal',
+      )
+      .addSelect(
+        "COUNT(*) FILTER (WHERE 'SPAM' = ANY(string_to_array(email.labels, ',')) AND email.isRead = false)",
+        'spamUnread',
+      )
+      .addSelect(
+        "COUNT(*) FILTER (WHERE 'TRASH' = ANY(string_to_array(email.labels, ',')))",
+        'trashTotal',
+      )
+      .where('email.mailboxId = :mailboxId', { mailboxId })
+      .andWhere('email.deletedAt IS NULL')
+      .getRawOne();
+
+    return {
+      inbox: {
+        total: Number(stats.inboxTotal) || 0,
+        unread: Number(stats.inboxUnread) || 0,
+      },
+      starred: {
+        total: Number(stats.starredTotal) || 0,
+        unread: Number(stats.starredUnread) || 0,
+      },
+      drafts: {
+        total: Number(stats.draftsTotal) || 0,
+        unread: 0,
+      },
+      sent: {
+        total: Number(stats.sentTotal) || 0,
+        unread: 0,
+      },
+      spam: {
+        total: Number(stats.spamTotal) || 0,
+        unread: Number(stats.spamUnread) || 0,
+      },
+      trash: {
+        total: Number(stats.trashTotal) || 0,
+        unread: 0,
+      },
     };
   }
 

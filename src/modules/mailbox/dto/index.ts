@@ -24,6 +24,7 @@ export {
   MailboxListResponseDto,
   MailboxResponseDto,
 } from './mailbox-response.dto';
+export { MailboxStatsDto } from './mailbox-stats.dto';
 export { SendEmailDto } from './send-email.dto';
 export { SemanticSearchDto } from './semantic-search.dto';
 export {

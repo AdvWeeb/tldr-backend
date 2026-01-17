@@ -11,6 +11,9 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
 
+  // Enable shutdown hooks to release resources on restart
+  app.enableShutdownHooks();
+
   // Enable cookie parser
   app.use(cookieParser());
 
@@ -59,8 +62,25 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   const port = (configService.get('appConfig.port') as number) || 3000;
-  await app.listen(port);
-  Logger.log(`Application is running on: http://localhost:${port}`);
-  Logger.log(`Swagger documentation: http://localhost:${port}/api/docs`);
+
+  // Function to start the application with retry logic for EADDRINUSE
+  const startApp = async (retries = 5) => {
+    try {
+      await app.listen(port);
+      Logger.log(`Application is running on: http://localhost:${port}`);
+      Logger.log(`Swagger documentation: http://localhost:${port}/api/docs`);
+    } catch (err: any) {
+      if (err.code === 'EADDRINUSE' && retries > 0) {
+        Logger.warn(
+          `Port ${port} is busy, retrying in 1 second... (${retries} retries left)`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return startApp(retries - 1);
+      }
+      throw err;
+    }
+  };
+
+  await startApp();
 }
 void bootstrap();

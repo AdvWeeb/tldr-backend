@@ -220,17 +220,6 @@ export class GmailService {
   }> {
     const { gmail } = this.getAuthenticatedClient(mailbox);
 
-    const response = await gmail.users.history.list({
-      userId: 'me',
-      startHistoryId,
-      historyTypes: [
-        'messageAdded',
-        'messageDeleted',
-        'labelAdded',
-        'labelRemoved',
-      ],
-    });
-
     const messagesAdded: string[] = [];
     const messagesDeleted: string[] = [];
     const labelsModified: Array<{
@@ -239,39 +228,69 @@ export class GmailService {
       labelsRemoved: string[];
     }> = [];
 
-    for (const history of response.data.history || []) {
-      if (history.messagesAdded) {
-        messagesAdded.push(
-          ...(history.messagesAdded
-            .map((m) => m.message?.id)
-            .filter(Boolean) as string[]),
-        );
+    let pageToken: string | undefined;
+    let latestHistoryId = startHistoryId;
+
+    do {
+      const response = await gmail.users.history.list({
+        userId: 'me',
+        startHistoryId,
+        labelId: 'INBOX', // Only track INBOX changes
+        historyTypes: [
+          'messageAdded',
+          'messageDeleted',
+          'labelAdded',
+          'labelRemoved',
+        ],
+        maxResults: 500,
+        pageToken,
+      });
+
+      this.logger.debug(
+        `History API response: historyId=${response.data.historyId}, records=${response.data.history?.length || 0}, nextPageToken=${response.data.nextPageToken ? 'yes' : 'no'}`,
+      );
+
+      // Update latest historyId
+      if (response.data.historyId) {
+        latestHistoryId = response.data.historyId;
       }
-      if (history.messagesDeleted) {
-        messagesDeleted.push(
-          ...(history.messagesDeleted
+
+      for (const history of response.data.history || []) {
+        if (history.messagesAdded) {
+          const addedIds = history.messagesAdded
             .map((m) => m.message?.id)
-            .filter(Boolean) as string[]),
-        );
-      }
-      if (history.labelsAdded || history.labelsRemoved) {
-        const messageId =
-          history.labelsAdded?.[0]?.message?.id ||
-          history.labelsRemoved?.[0]?.message?.id;
-        if (messageId) {
-          labelsModified.push({
-            messageId,
-            labelsAdded:
-              history.labelsAdded?.flatMap((l) => l.labelIds || []) || [],
-            labelsRemoved:
-              history.labelsRemoved?.flatMap((l) => l.labelIds || []) || [],
-          });
+            .filter(Boolean) as string[];
+          messagesAdded.push(...addedIds);
+          this.logger.debug(`Found ${addedIds.length} messages added in history record`);
+        }
+        if (history.messagesDeleted) {
+          messagesDeleted.push(
+            ...(history.messagesDeleted
+              .map((m) => m.message?.id)
+              .filter(Boolean) as string[]),
+          );
+        }
+        if (history.labelsAdded || history.labelsRemoved) {
+          const messageId =
+            history.labelsAdded?.[0]?.message?.id ||
+            history.labelsRemoved?.[0]?.message?.id;
+          if (messageId) {
+            labelsModified.push({
+              messageId,
+              labelsAdded:
+                history.labelsAdded?.flatMap((l) => l.labelIds || []) || [],
+              labelsRemoved:
+                history.labelsRemoved?.flatMap((l) => l.labelIds || []) || [],
+            });
+          }
         }
       }
-    }
+
+      pageToken = response.data.nextPageToken ?? undefined;
+    } while (pageToken);
 
     return {
-      historyId: response.data.historyId || startHistoryId,
+      historyId: latestHistoryId,
       messagesAdded: [...new Set(messagesAdded)],
       messagesDeleted: [...new Set(messagesDeleted)],
       labelsModified,

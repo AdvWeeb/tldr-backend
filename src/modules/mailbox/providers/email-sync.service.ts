@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, LessThan, Repository } from 'typeorm';
@@ -23,10 +28,11 @@ const MAX_RETRIES = 3;
 const RETRY_DELAYS = [60000, 300000, 900000];
 
 @Injectable()
-export class EmailSyncService implements OnModuleInit {
+export class EmailSyncService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(EmailSyncService.name);
   private readonly retryQueue: Map<number, SyncJob> = new Map();
   private isSyncing = false;
+  private isShuttingDown = false;
 
   constructor(
     @InjectRepository(Mailbox)
@@ -43,8 +49,14 @@ export class EmailSyncService implements OnModuleInit {
     this.logger.log('Email sync service initialized');
   }
 
+  onModuleDestroy() {
+    this.logger.log('Email sync service shutting down, stopping tasks...');
+    this.isShuttingDown = true;
+  }
+
   @Cron(CronExpression.EVERY_5_MINUTES)
   async scheduledTokenRefresh() {
+    if (this.isShuttingDown) return;
     this.logger.debug('Running scheduled token refresh');
 
     const expiringMailboxes = await this.mailboxRepository.find({
@@ -59,18 +71,50 @@ export class EmailSyncService implements OnModuleInit {
     }
   }
 
-  @Cron(CronExpression.EVERY_10_MINUTES)
+  @Cron(CronExpression.EVERY_30_SECONDS)
   async scheduledIncrementalSync() {
-    if (this.isSyncing) {
-      this.logger.debug('Sync already in progress, skipping');
+    if (this.isSyncing || this.isShuttingDown) {
+      this.logger.debug('Sync already in progress or shutting down, skipping');
       return;
     }
 
     this.logger.debug('Running scheduled incremental sync');
 
+    // Find mailboxes ready to sync (SYNCED, ERROR, or PENDING status)
     const mailboxes = await this.mailboxRepository.find({
-      where: { isActive: true, syncStatus: MailboxSyncStatus.SYNCED },
+      where: [
+        { isActive: true, syncStatus: MailboxSyncStatus.SYNCED },
+        { isActive: true, syncStatus: MailboxSyncStatus.ERROR },
+        { isActive: true, syncStatus: MailboxSyncStatus.PENDING },
+      ],
     });
+
+    // Also check for stuck mailboxes (SYNCING for more than 5 minutes)
+    const stuckThreshold = new Date(Date.now() - 5 * 60 * 1000);
+    const stuckMailboxes = await this.mailboxRepository.find({
+      where: {
+        isActive: true,
+        syncStatus: MailboxSyncStatus.SYNCING,
+        updatedAt: LessThan(stuckThreshold),
+      },
+    });
+
+    if (stuckMailboxes.length > 0) {
+      this.logger.warn(
+        `Found ${stuckMailboxes.length} stuck mailboxes, resetting to SYNCED`,
+      );
+      for (const mailbox of stuckMailboxes) {
+        await this.mailboxRepository.update(mailbox.id, {
+          syncStatus: MailboxSyncStatus.SYNCED,
+        });
+      }
+      // Add reset mailboxes to the sync list
+      mailboxes.push(...stuckMailboxes);
+    }
+
+    if (mailboxes.length > 0) {
+      this.logger.debug(`Found ${mailboxes.length} mailboxes to sync`);
+    }
 
     for (const mailbox of mailboxes) {
       await this.incrementalSync(mailbox.id);
@@ -115,7 +159,7 @@ export class EmailSyncService implements OnModuleInit {
     }
   }
 
-  async fullSync(mailboxId: number): Promise<void> {
+  async fullSync(mailboxId: number, maxEmails: number = 200): Promise<void> {
     const mailbox = await this.mailboxRepository.findOne({
       where: { id: mailboxId },
     });
@@ -131,17 +175,20 @@ export class EmailSyncService implements OnModuleInit {
         syncStatus: MailboxSyncStatus.SYNCING,
       });
 
-      this.logger.log(`Starting full sync for mailbox ${mailboxId}`);
+      this.logger.log(
+        `Starting full sync for mailbox ${mailboxId} (max ${maxEmails} emails)`,
+      );
 
       const profile = await this.gmailService.getProfile(mailbox);
 
       let pageToken: string | undefined;
       let totalSynced = 0;
+      let pagesProcessed = 0;
 
       do {
         const { messages, nextPageToken } =
           await this.gmailService.listMessages(mailbox, {
-            maxResults: 100,
+            maxResults: Math.min(50, maxEmails - totalSynced), // Smaller batches for faster response
             pageToken,
             labelIds: ['INBOX'],
           });
@@ -158,9 +205,22 @@ export class EmailSyncService implements OnModuleInit {
           }
 
           totalSynced += parsedEmails.length;
+          pagesProcessed++;
+
+          this.logger.log(
+            `Full sync progress: ${totalSynced} emails synced (page ${pagesProcessed})`,
+          );
         }
 
         pageToken = nextPageToken;
+
+        // Stop if we've reached the max emails limit
+        if (totalSynced >= maxEmails) {
+          this.logger.log(
+            `Reached max emails limit (${maxEmails}), stopping full sync`,
+          );
+          break;
+        }
       } while (pageToken);
 
       await this.mailboxRepository.update(mailboxId, {
@@ -206,6 +266,10 @@ export class EmailSyncService implements OnModuleInit {
       const changes = await this.gmailService.getHistoryChanges(
         mailbox,
         mailbox.historyId,
+      );
+
+      this.logger.debug(
+        `Changes for ${mailbox.email}: ${changes.messagesAdded.length} added, ${changes.messagesDeleted.length} deleted, ${changes.labelsModified.length} labels modified`,
       );
 
       if (changes.messagesAdded.length > 0) {
@@ -270,7 +334,26 @@ export class EmailSyncService implements OnModuleInit {
 
       this.logger.log(`Incremental sync completed for mailbox ${mailboxId}`);
     } catch (error) {
-      await this.handleSyncError(mailboxId, error as Error);
+      const err = error as Error & { code?: number; status?: number };
+
+      // Gmail API returns 404 when historyId is too old (> 7 days)
+      // In this case, we need to do a full sync
+      if (err.code === 404 || err.status === 404 || err.message?.includes('404')) {
+        this.logger.warn(
+          `HistoryId ${mailbox.historyId} is stale for mailbox ${mailboxId}, triggering full sync`,
+        );
+
+        // Reset historyId and trigger full sync
+        await this.mailboxRepository.update(mailboxId, {
+          historyId: null,
+          syncStatus: MailboxSyncStatus.PENDING,
+        });
+
+        this.isSyncing = false;
+        return this.fullSync(mailboxId);
+      }
+
+      await this.handleSyncError(mailboxId, err);
     } finally {
       this.isSyncing = false;
     }

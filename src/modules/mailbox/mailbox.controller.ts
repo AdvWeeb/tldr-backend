@@ -18,14 +18,22 @@ import {
 } from '@nestjs/swagger';
 import { CurrentUser } from '../auth/decorators';
 import { User } from '../user/entities/user.entity';
-import { ConnectMailboxDto, MailboxResponseDto } from './dto';
+import {
+  ConnectMailboxDto,
+  MailboxResponseDto,
+  MailboxStatsDto,
+} from './dto';
+import { EmailService } from './email.service';
 import { MailboxService } from './mailbox.service';
 
 @ApiTags('Mailboxes')
 @ApiBearerAuth()
 @Controller('mailboxes')
 export class MailboxController {
-  constructor(private readonly mailboxService: MailboxService) {}
+  constructor(
+    private readonly mailboxService: MailboxService,
+    private readonly emailService: EmailService,
+  ) {}
 
   @Get()
   @ApiOperation({ summary: 'List all user mailboxes' })
@@ -99,6 +107,25 @@ export class MailboxController {
   ): Promise<{ message: string }> {
     await this.mailboxService.syncMailbox(user.id, id);
     return { message: 'Sync initiated' };
+  }
+
+  @Get(':id/stats')
+  @ApiOperation({ summary: 'Get mailbox email counts by category' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: 'Mailbox statistics',
+    type: MailboxStatsDto,
+  })
+  @ApiResponse({
+    status: HttpStatus.NOT_FOUND,
+    description: 'Mailbox not found',
+  })
+  async getStats(
+    @CurrentUser() user: User,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<MailboxStatsDto> {
+    return this.emailService.getMailboxStats(user.id, id);
   }
 
   @Delete(':id')
