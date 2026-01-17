@@ -1,4 +1,4 @@
-name: Deploy API to VPS via SSH
+name: Deploy API to GCP VM via SSH
 
 on:
   push:
@@ -31,6 +31,8 @@ jobs:
           username: ${{ secrets.VM_USERNAME }}
           key: ${{ secrets.VM_SSH_PRIVATE_KEY }}
           script: |
+            set -eo pipefail
+            
             cd /home/ubuntu/apps/tldr-backend
             
             if [ ! -f .env ]; then
