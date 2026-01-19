@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, IsNull, Repository } from 'typeorm';
+import type { File as MulterFile } from 'multer';
 import {
   EmailQueryDto,
   EmailSummaryDto,
@@ -364,6 +365,7 @@ export class EmailService {
   async sendEmail(
     userId: number,
     sendDto: SendEmailDto,
+    files?: MulterFile[],
   ): Promise<{ messageId: string }> {
     // Verify mailbox belongs to user
     const mailbox = await this.mailboxRepository.findOne({
@@ -392,16 +394,20 @@ export class EmailService {
     }
 
     // Send via Gmail API
-    const messageId = await this.gmailService.sendEmail(mailbox, {
-      to: sendDto.to,
-      cc: sendDto.cc,
-      bcc: sendDto.bcc,
-      subject: sendDto.subject,
-      body: sendDto.body,
-      bodyHtml: sendDto.bodyHtml,
-      inReplyTo: sendDto.inReplyTo,
-      threadId: sendDto.threadId,
-    });
+    const messageId = await this.gmailService.sendEmail(
+      mailbox,
+      {
+        to: sendDto.to,
+        cc: sendDto.cc,
+        bcc: sendDto.bcc,
+        subject: sendDto.subject,
+        body: sendDto.body,
+        bodyHtml: sendDto.bodyHtml,
+        inReplyTo: sendDto.inReplyTo,
+        threadId: sendDto.threadId,
+      },
+      files,
+    );
 
     this.logger.log(
       `Sent email from mailbox ${mailbox.id} to ${sendDto.to.join(', ')}`,

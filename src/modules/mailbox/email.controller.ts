@@ -11,7 +11,11 @@ import {
   Post,
   Query,
   Req,
+  UploadedFiles,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
+import type { File as MulterFile } from 'multer';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -83,7 +87,8 @@ export class EmailController {
   }
 
   @Post('send')
-  @ApiOperation({ summary: 'Send an email via Gmail API' })
+  @UseInterceptors(FilesInterceptor('attachments', 10)) // Max 10 files
+  @ApiOperation({ summary: 'Send an email via Gmail API with optional attachments' })
   @ApiResponse({
     status: HttpStatus.CREATED,
     description: 'Email sent successfully',
@@ -101,8 +106,9 @@ export class EmailController {
   async sendEmail(
     @CurrentUser() user: User,
     @Body() sendDto: SendEmailDto,
+    @UploadedFiles() files?: MulterFile[],
   ): Promise<{ messageId: string }> {
-    return this.emailService.sendEmail(user.id, sendDto);
+    return this.emailService.sendEmail(user.id, sendDto, files);
   }
 
   @Get(':id')

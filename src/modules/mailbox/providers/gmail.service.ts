@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { gmail_v1, google } from 'googleapis';
 import { EncryptionUtil } from '../../../common/utils/encryption.util';
 import { Mailbox } from '../entities/mailbox.entity';
+import type { File as MulterFile } from 'multer';
 
 export interface GmailMessage {
   id: string;
@@ -440,6 +441,7 @@ export class GmailService {
       inReplyTo?: string;
       threadId?: string;
     },
+    files?: MulterFile[],
   ): Promise<string> {
     const { gmail } = this.getAuthenticatedClient(mailbox);
 
@@ -466,31 +468,95 @@ export class GmailService {
 
     messageParts.push('MIME-Version: 1.0');
 
-    // If HTML body is provided, send multipart
-    if (emailData.bodyHtml) {
-      const boundary = `boundary_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    const hasAttachments = files && files.length > 0;
+
+    // If we have attachments, use multipart/mixed as the top level
+    if (hasAttachments) {
+      const mixedBoundary = `mixed_${Date.now()}_${Math.random().toString(36).substring(7)}`;
       messageParts.push(
-        `Content-Type: multipart/alternative; boundary="${boundary}"`,
+        `Content-Type: multipart/mixed; boundary="${mixedBoundary}"`,
       );
       messageParts.push('');
-      messageParts.push(`--${boundary}`);
-      messageParts.push('Content-Type: text/plain; charset=UTF-8');
-      messageParts.push('Content-Transfer-Encoding: 8bit');
+
+      // First part: message body (text or alternative)
+      messageParts.push(`--${mixedBoundary}`);
+      
+      if (emailData.bodyHtml) {
+        const altBoundary = `alt_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        messageParts.push(
+          `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+        );
+        messageParts.push('');
+        messageParts.push(`--${altBoundary}`);
+        messageParts.push('Content-Type: text/plain; charset=UTF-8');
+        messageParts.push('Content-Transfer-Encoding: 8bit');
+        messageParts.push('');
+        messageParts.push(emailData.body);
+        messageParts.push('');
+        messageParts.push(`--${altBoundary}`);
+        messageParts.push('Content-Type: text/html; charset=UTF-8');
+        messageParts.push('Content-Transfer-Encoding: 8bit');
+        messageParts.push('');
+        messageParts.push(emailData.bodyHtml);
+        messageParts.push('');
+        messageParts.push(`--${altBoundary}--`);
+      } else {
+        messageParts.push('Content-Type: text/plain; charset=UTF-8');
+        messageParts.push('Content-Transfer-Encoding: 8bit');
+        messageParts.push('');
+        messageParts.push(emailData.body);
+      }
+
+      // Add attachments
+      for (const file of files) {
+        messageParts.push('');
+        messageParts.push(`--${mixedBoundary}`);
+        messageParts.push(
+          `Content-Type: ${file.mimetype}; name="${file.originalname}"`,
+        );
+        messageParts.push(
+          `Content-Disposition: attachment; filename="${file.originalname}"`,
+        );
+        messageParts.push('Content-Transfer-Encoding: base64');
+        messageParts.push('');
+        
+        // Encode file to base64 and split into 76-character lines (RFC 2045)
+        const base64Data = file.buffer.toString('base64');
+        // Push lines in chunks to avoid stack overflow with large files
+        for (let i = 0; i < base64Data.length; i += 76) {
+          messageParts.push(base64Data.substring(i, i + 76));
+        }
+      }
+
       messageParts.push('');
-      messageParts.push(emailData.body);
-      messageParts.push('');
-      messageParts.push(`--${boundary}`);
-      messageParts.push('Content-Type: text/html; charset=UTF-8');
-      messageParts.push('Content-Transfer-Encoding: 8bit');
-      messageParts.push('');
-      messageParts.push(emailData.bodyHtml);
-      messageParts.push('');
-      messageParts.push(`--${boundary}--`);
+      messageParts.push(`--${mixedBoundary}--`);
     } else {
-      messageParts.push('Content-Type: text/plain; charset=UTF-8');
-      messageParts.push('Content-Transfer-Encoding: 8bit');
-      messageParts.push('');
-      messageParts.push(emailData.body);
+      // No attachments, use simpler structure
+      if (emailData.bodyHtml) {
+        const boundary = `boundary_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+        messageParts.push(
+          `Content-Type: multipart/alternative; boundary="${boundary}"`,
+        );
+        messageParts.push('');
+        messageParts.push(`--${boundary}`);
+        messageParts.push('Content-Type: text/plain; charset=UTF-8');
+        messageParts.push('Content-Transfer-Encoding: 8bit');
+        messageParts.push('');
+        messageParts.push(emailData.body);
+        messageParts.push('');
+        messageParts.push(`--${boundary}`);
+        messageParts.push('Content-Type: text/html; charset=UTF-8');
+        messageParts.push('Content-Transfer-Encoding: 8bit');
+        messageParts.push('');
+        messageParts.push(emailData.bodyHtml);
+        messageParts.push('');
+        messageParts.push(`--${boundary}--`);
+      } else {
+        messageParts.push('Content-Type: text/plain; charset=UTF-8');
+        messageParts.push('Content-Transfer-Encoding: 8bit');
+        messageParts.push('');
+        messageParts.push(emailData.body);
+      }
     }
 
     const message = messageParts.join('\r\n');
