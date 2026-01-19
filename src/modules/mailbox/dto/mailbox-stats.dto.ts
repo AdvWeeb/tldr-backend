@@ -26,5 +26,8 @@ export class MailboxStatsDto {
 
   @ApiProperty()
   trash: StatItem;
+
+  @ApiProperty()
+  snoozed: StatItem;
 }
 

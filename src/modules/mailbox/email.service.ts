@@ -54,8 +54,17 @@ export class EmailService {
       .createQueryBuilder('email')
       .where('email.mailboxId IN (:...mailboxIds)', {
         mailboxIds: userMailboxIds,
-      })
-      .andWhere('email.deletedAt IS NULL');
+      });
+
+    if (query.includeDeleted) {
+      // Show only soft-deleted emails (for Trash view)
+      // Use withDeleted() to prevent TypeORM from auto-filtering soft-deleted records
+      qb.withDeleted().andWhere('email.deletedAt IS NOT NULL');
+    } else {
+      // Exclude soft-deleted emails (for all other views)
+      // TypeORM automatically filters these out, but we'll be explicit
+      qb.andWhere('email.deletedAt IS NULL');
+    }
 
     if (query.mailboxId) {
       if (!userMailboxIds.includes(query.mailboxId)) {
@@ -142,10 +151,16 @@ export class EmailService {
 
     qb.addOrderBy('email.isPinned', 'DESC');
 
+    // Debug: Log the full SQL query
+    this.logger.debug(`Final SQL Query: ${qb.getSql()}`);
+    this.logger.debug(`Query Parameters: ${JSON.stringify(qb.getParameters())}`);
+
     const [emails, totalItems] = await qb
       .skip(skip)
       .take(limit)
       .getManyAndCount();
+
+    this.logger.debug(`Query returned ${emails.length} emails out of ${totalItems} total`);
 
     const totalPages = Math.ceil(totalItems / limit);
 
@@ -437,44 +452,48 @@ export class EmailService {
 
     const stats = await this.emailRepository
       .createQueryBuilder('email')
+      .withDeleted()
       .select(
-        "COUNT(*) FILTER (WHERE 'INBOX' = ANY(string_to_array(email.labels, ',')))",
+        "COUNT(*) FILTER (WHERE 'INBOX' = ANY(string_to_array(email.labels, ',')) AND email.deletedAt IS NULL)",
         'inboxTotal',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE 'INBOX' = ANY(string_to_array(email.labels, ',')) AND email.isRead = false)",
+        "COUNT(*) FILTER (WHERE 'INBOX' = ANY(string_to_array(email.labels, ',')) AND email.isRead = false AND email.deletedAt IS NULL)",
         'inboxUnread',
       )
       .addSelect(
-        'COUNT(*) FILTER (WHERE email.isStarred = true)',
+        'COUNT(*) FILTER (WHERE email.isStarred = true AND email.deletedAt IS NULL)',
         'starredTotal',
       )
       .addSelect(
-        'COUNT(*) FILTER (WHERE email.isStarred = true AND email.isRead = false)',
+        'COUNT(*) FILTER (WHERE email.isStarred = true AND email.isRead = false AND email.deletedAt IS NULL)',
         'starredUnread',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE 'DRAFT' = ANY(string_to_array(email.labels, ',')))",
+        "COUNT(*) FILTER (WHERE 'DRAFT' = ANY(string_to_array(email.labels, ',')) AND email.deletedAt IS NULL)",
         'draftsTotal',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE 'SENT' = ANY(string_to_array(email.labels, ',')))",
+        "COUNT(*) FILTER (WHERE 'SENT' = ANY(string_to_array(email.labels, ',')) AND email.deletedAt IS NULL)",
         'sentTotal',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE 'SPAM' = ANY(string_to_array(email.labels, ',')))",
+        "COUNT(*) FILTER (WHERE 'SPAM' = ANY(string_to_array(email.labels, ',')) AND email.deletedAt IS NULL)",
         'spamTotal',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE 'SPAM' = ANY(string_to_array(email.labels, ',')) AND email.isRead = false)",
+        "COUNT(*) FILTER (WHERE 'SPAM' = ANY(string_to_array(email.labels, ',')) AND email.isRead = false AND email.deletedAt IS NULL)",
         'spamUnread',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE 'TRASH' = ANY(string_to_array(email.labels, ',')))",
+        'COUNT(*) FILTER (WHERE email.deletedAt IS NOT NULL)',
         'trashTotal',
       )
+      .addSelect(
+        'COUNT(*) FILTER (WHERE email.isSnoozed = true AND email.deletedAt IS NULL)',
+        'snoozedTotal',
+      )
       .where('email.mailboxId = :mailboxId', { mailboxId })
-      .andWhere('email.deletedAt IS NULL')
       .getRawOne();
 
     return {
@@ -500,6 +519,10 @@ export class EmailService {
       },
       trash: {
         total: Number(stats.trashTotal) || 0,
+        unread: 0,
+      },
+      snoozed: {
+        total: Number(stats.snoozedTotal) || 0,
         unread: 0,
       },
     };
