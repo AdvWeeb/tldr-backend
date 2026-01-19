@@ -280,6 +280,7 @@ export class EmailService {
       category: email.category,
       taskStatus: email.taskStatus,
       isPinned: email.isPinned,
+      columnId: email.columnId,
       isSnoozed: email.isSnoozed,
       snoozedUntil: email.snoozedUntil,
       aiSummary: email.aiSummary,
@@ -1063,7 +1064,7 @@ export class EmailService {
         );
 
         // Update local email entity to reflect label changes immediately
-        const currentLabels = email.labels || [];
+        const currentLabels = Array.isArray(email.labels) ? email.labels : [];
         const updatedLabels = [
           ...new Set([
             ...currentLabels.filter((l) => !removeLabelIds.includes(l)),
@@ -1072,9 +1073,10 @@ export class EmailService {
         ];
 
         await this.emailRepository.update(email.id, {
-          labels: updatedLabels,
+          labels: updatedLabels.length > 0 ? updatedLabels : null,
           isStarred: updatedLabels.includes('STARRED'),
           isRead: !updatedLabels.includes('UNREAD'),
+          columnId: columnId, // Track which column this email is in
         });
       } catch (error) {
         this.logger.error(
@@ -1083,6 +1085,15 @@ export class EmailService {
         );
         throw new Error('Failed to synchronize with Gmail');
       }
+    } else {
+      // No Gmail label changes needed (e.g., moving to/from custom columns without labels)
+      // But we still need to update the columnId
+      await this.emailRepository.update(email.id, {
+        columnId: columnId, // Track which column this email is in
+      });
+      this.logger.log(
+        `Moved email ${emailId} to column "${column.title}" (no Gmail label changes needed)`,
+      );
     }
   }
 

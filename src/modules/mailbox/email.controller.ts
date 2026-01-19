@@ -317,6 +317,7 @@ export class EmailController {
       taskStatus: email.taskStatus,
       taskDeadline: email.taskDeadline,
       isPinned: email.isPinned,
+      columnId: email.columnId,
       isSnoozed: email.isSnoozed,
       snoozedUntil: email.snoozedUntil,
       aiSummary: email.aiSummary,

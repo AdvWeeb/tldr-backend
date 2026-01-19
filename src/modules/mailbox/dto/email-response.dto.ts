@@ -50,6 +50,9 @@ export class EmailSummaryDto {
   @ApiProperty({ example: false })
   isPinned: boolean;
 
+  @ApiPropertyOptional({ example: 1, description: 'Kanban column ID' })
+  columnId: number | null;
+
   @ApiProperty({ example: false })
   isSnoozed: boolean;
 
