@@ -1070,6 +1070,17 @@ export class EmailService {
       removeLabelIds.push('INBOX');
     }
 
+    // Determine taskStatus based on column title
+    let taskStatus: string | null = null;
+    const columnTitleLower = column.title.toLowerCase();
+    if (columnTitleLower === 'to do' || columnTitleLower === 'todo') {
+      taskStatus = 'todo';
+    } else if (columnTitleLower === 'in progress') {
+      taskStatus = 'in_progress';
+    } else if (columnTitleLower === 'done') {
+      taskStatus = 'done';
+    }
+
     // Sync with Gmail if there are label changes
     if (addLabelIds.length > 0 || removeLabelIds.length > 0) {
       try {
@@ -1095,12 +1106,19 @@ export class EmailService {
           ]),
         ];
 
-        await this.emailRepository.update(email.id, {
+        const updateData: any = {
           labels: updatedLabels.length > 0 ? updatedLabels : null,
           isStarred: updatedLabels.includes('STARRED'),
           isRead: !updatedLabels.includes('UNREAD'),
           columnId: columnId, // Track which column this email is in
-        });
+        };
+
+        // Update taskStatus if moving to a task-related column
+        if (taskStatus) {
+          updateData.taskStatus = taskStatus;
+        }
+
+        await this.emailRepository.update(email.id, updateData);
       } catch (error) {
         this.logger.error(
           `Failed to sync Gmail labels for email ${emailId}`,
@@ -1110,10 +1128,17 @@ export class EmailService {
       }
     } else {
       // No Gmail label changes needed (e.g., moving to/from custom columns without labels)
-      // But we still need to update the columnId
-      await this.emailRepository.update(email.id, {
+      // But we still need to update the columnId and potentially taskStatus
+      const updateData: any = {
         columnId: columnId, // Track which column this email is in
-      });
+      };
+
+      // Update taskStatus if moving to a task-related column
+      if (taskStatus) {
+        updateData.taskStatus = taskStatus;
+      }
+
+      await this.emailRepository.update(email.id, updateData);
       this.logger.log(
         `Moved email ${emailId} to column "${column.title}" (no Gmail label changes needed)`,
       );
