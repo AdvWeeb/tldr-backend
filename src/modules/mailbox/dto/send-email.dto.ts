@@ -10,11 +10,18 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class SendEmailDto {
   @ApiProperty({
     description: 'Mailbox ID to send from',
     example: 1,
+  })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      return parseInt(value, 10);
+    }
+    return value;
   })
   @IsNotEmpty()
   mailboxId: number;
@@ -23,6 +30,16 @@ export class SendEmailDto {
     description: 'Recipient email addresses',
     example: ['user@example.com'],
     type: [String],
+  })
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return [value];
+      }
+    }
+    return value;
   })
   @IsArray()
   @ArrayNotEmpty({ message: 'At least one recipient is required' })
@@ -39,13 +56,24 @@ export class SendEmailDto {
     type: [String],
     required: false,
   })
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return [value];
+      }
+    }
+    return value;
+  })
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(500, { message: 'Cannot exceed 500 CC recipients' })
   @IsEmail(
     {},
     { each: true, message: 'Each CC recipient must be a valid email address' },
   )
-  @IsOptional()
   cc?: string[];
 
   @ApiProperty({
@@ -54,13 +82,24 @@ export class SendEmailDto {
     type: [String],
     required: false,
   })
+  @Transform(({ value }) => {
+    if (!value) return undefined;
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch {
+        return [value];
+      }
+    }
+    return value;
+  })
+  @IsOptional()
   @IsArray()
   @ArrayMaxSize(500, { message: 'Cannot exceed 500 BCC recipients' })
   @IsEmail(
     {},
     { each: true, message: 'Each BCC recipient must be a valid email address' },
   )
-  @IsOptional()
   bcc?: string[];
 
   @ApiProperty({

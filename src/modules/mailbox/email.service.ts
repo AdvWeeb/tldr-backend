@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Brackets, IsNull, Repository } from 'typeorm';
+import type { File as MulterFile } from 'multer';
 import {
   EmailQueryDto,
   EmailSummaryDto,
@@ -54,8 +55,17 @@ export class EmailService {
       .createQueryBuilder('email')
       .where('email.mailboxId IN (:...mailboxIds)', {
         mailboxIds: userMailboxIds,
-      })
-      .andWhere('email.deletedAt IS NULL');
+      });
+
+    if (query.includeDeleted) {
+      // Show only soft-deleted emails (for Trash view)
+      // Use withDeleted() to prevent TypeORM from auto-filtering soft-deleted records
+      qb.withDeleted().andWhere('email.deletedAt IS NOT NULL');
+    } else {
+      // Exclude soft-deleted emails (for all other views)
+      // TypeORM automatically filters these out, but we'll be explicit
+      qb.andWhere('email.deletedAt IS NULL');
+    }
 
     if (query.mailboxId) {
       if (!userMailboxIds.includes(query.mailboxId)) {
@@ -142,10 +152,16 @@ export class EmailService {
 
     qb.addOrderBy('email.isPinned', 'DESC');
 
+    // Debug: Log the full SQL query
+    this.logger.debug(`Final SQL Query: ${qb.getSql()}`);
+    this.logger.debug(`Query Parameters: ${JSON.stringify(qb.getParameters())}`);
+
     const [emails, totalItems] = await qb
       .skip(skip)
       .take(limit)
       .getManyAndCount();
+
+    this.logger.debug(`Query returned ${emails.length} emails out of ${totalItems} total`);
 
     const totalPages = Math.ceil(totalItems / limit);
 
@@ -280,6 +296,7 @@ export class EmailService {
       category: email.category,
       taskStatus: email.taskStatus,
       isPinned: email.isPinned,
+      columnId: email.columnId,
       isSnoozed: email.isSnoozed,
       snoozedUntil: email.snoozedUntil,
       aiSummary: email.aiSummary,
@@ -348,6 +365,7 @@ export class EmailService {
   async sendEmail(
     userId: number,
     sendDto: SendEmailDto,
+    files?: MulterFile[],
   ): Promise<{ messageId: string }> {
     // Verify mailbox belongs to user
     const mailbox = await this.mailboxRepository.findOne({
@@ -376,16 +394,20 @@ export class EmailService {
     }
 
     // Send via Gmail API
-    const messageId = await this.gmailService.sendEmail(mailbox, {
-      to: sendDto.to,
-      cc: sendDto.cc,
-      bcc: sendDto.bcc,
-      subject: sendDto.subject,
-      body: sendDto.body,
-      bodyHtml: sendDto.bodyHtml,
-      inReplyTo: sendDto.inReplyTo,
-      threadId: sendDto.threadId,
-    });
+    const messageId = await this.gmailService.sendEmail(
+      mailbox,
+      {
+        to: sendDto.to,
+        cc: sendDto.cc,
+        bcc: sendDto.bcc,
+        subject: sendDto.subject,
+        body: sendDto.body,
+        bodyHtml: sendDto.bodyHtml,
+        inReplyTo: sendDto.inReplyTo,
+        threadId: sendDto.threadId,
+      },
+      files,
+    );
 
     this.logger.log(
       `Sent email from mailbox ${mailbox.id} to ${sendDto.to.join(', ')}`,
@@ -436,44 +458,48 @@ export class EmailService {
 
     const stats = await this.emailRepository
       .createQueryBuilder('email')
+      .withDeleted()
       .select(
-        "COUNT(*) FILTER (WHERE 'INBOX' = ANY(string_to_array(email.labels, ',')))",
+        "COUNT(*) FILTER (WHERE 'INBOX' = ANY(string_to_array(email.labels, ',')) AND email.deletedAt IS NULL)",
         'inboxTotal',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE 'INBOX' = ANY(string_to_array(email.labels, ',')) AND email.isRead = false)",
+        "COUNT(*) FILTER (WHERE 'INBOX' = ANY(string_to_array(email.labels, ',')) AND email.isRead = false AND email.deletedAt IS NULL)",
         'inboxUnread',
       )
       .addSelect(
-        'COUNT(*) FILTER (WHERE email.isStarred = true)',
+        'COUNT(*) FILTER (WHERE email.isStarred = true AND email.deletedAt IS NULL)',
         'starredTotal',
       )
       .addSelect(
-        'COUNT(*) FILTER (WHERE email.isStarred = true AND email.isRead = false)',
+        'COUNT(*) FILTER (WHERE email.isStarred = true AND email.isRead = false AND email.deletedAt IS NULL)',
         'starredUnread',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE 'DRAFT' = ANY(string_to_array(email.labels, ',')))",
+        "COUNT(*) FILTER (WHERE 'DRAFT' = ANY(string_to_array(email.labels, ',')) AND email.deletedAt IS NULL)",
         'draftsTotal',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE 'SENT' = ANY(string_to_array(email.labels, ',')))",
+        "COUNT(*) FILTER (WHERE 'SENT' = ANY(string_to_array(email.labels, ',')) AND email.deletedAt IS NULL)",
         'sentTotal',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE 'SPAM' = ANY(string_to_array(email.labels, ',')))",
+        "COUNT(*) FILTER (WHERE 'SPAM' = ANY(string_to_array(email.labels, ',')) AND email.deletedAt IS NULL)",
         'spamTotal',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE 'SPAM' = ANY(string_to_array(email.labels, ',')) AND email.isRead = false)",
+        "COUNT(*) FILTER (WHERE 'SPAM' = ANY(string_to_array(email.labels, ',')) AND email.isRead = false AND email.deletedAt IS NULL)",
         'spamUnread',
       )
       .addSelect(
-        "COUNT(*) FILTER (WHERE 'TRASH' = ANY(string_to_array(email.labels, ',')))",
+        'COUNT(*) FILTER (WHERE email.deletedAt IS NOT NULL)',
         'trashTotal',
       )
+      .addSelect(
+        'COUNT(*) FILTER (WHERE email.isSnoozed = true AND email.deletedAt IS NULL)',
+        'snoozedTotal',
+      )
       .where('email.mailboxId = :mailboxId', { mailboxId })
-      .andWhere('email.deletedAt IS NULL')
       .getRawOne();
 
     return {
@@ -499,6 +525,10 @@ export class EmailService {
       },
       trash: {
         total: Number(stats.trashTotal) || 0,
+        unread: 0,
+      },
+      snoozed: {
+        total: Number(stats.snoozedTotal) || 0,
         unread: 0,
       },
     };
@@ -1046,6 +1076,17 @@ export class EmailService {
       removeLabelIds.push('INBOX');
     }
 
+    // Determine taskStatus based on column title
+    let taskStatus: string | null = null;
+    const columnTitleLower = column.title.toLowerCase();
+    if (columnTitleLower === 'to do' || columnTitleLower === 'todo') {
+      taskStatus = 'todo';
+    } else if (columnTitleLower === 'in progress') {
+      taskStatus = 'in_progress';
+    } else if (columnTitleLower === 'done') {
+      taskStatus = 'done';
+    }
+
     // Sync with Gmail if there are label changes
     if (addLabelIds.length > 0 || removeLabelIds.length > 0) {
       try {
@@ -1063,7 +1104,7 @@ export class EmailService {
         );
 
         // Update local email entity to reflect label changes immediately
-        const currentLabels = email.labels || [];
+        const currentLabels = Array.isArray(email.labels) ? email.labels : [];
         const updatedLabels = [
           ...new Set([
             ...currentLabels.filter((l) => !removeLabelIds.includes(l)),
@@ -1071,11 +1112,19 @@ export class EmailService {
           ]),
         ];
 
-        await this.emailRepository.update(email.id, {
-          labels: updatedLabels,
+        const updateData: any = {
+          labels: updatedLabels.length > 0 ? updatedLabels : null,
           isStarred: updatedLabels.includes('STARRED'),
           isRead: !updatedLabels.includes('UNREAD'),
-        });
+          columnId: columnId, // Track which column this email is in
+        };
+
+        // Update taskStatus if moving to a task-related column
+        if (taskStatus) {
+          updateData.taskStatus = taskStatus;
+        }
+
+        await this.emailRepository.update(email.id, updateData);
       } catch (error) {
         this.logger.error(
           `Failed to sync Gmail labels for email ${emailId}`,
@@ -1083,6 +1132,22 @@ export class EmailService {
         );
         throw new Error('Failed to synchronize with Gmail');
       }
+    } else {
+      // No Gmail label changes needed (e.g., moving to/from custom columns without labels)
+      // But we still need to update the columnId and potentially taskStatus
+      const updateData: any = {
+        columnId: columnId, // Track which column this email is in
+      };
+
+      // Update taskStatus if moving to a task-related column
+      if (taskStatus) {
+        updateData.taskStatus = taskStatus;
+      }
+
+      await this.emailRepository.update(email.id, updateData);
+      this.logger.log(
+        `Moved email ${emailId} to column "${column.title}" (no Gmail label changes needed)`,
+      );
     }
   }
 

@@ -87,6 +87,12 @@ export class EmailQueryDto {
   @IsOptional()
   isSnoozed?: boolean;
 
+  @ApiPropertyOptional({ description: 'Include soft-deleted emails (for Trash view)' })
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  @IsOptional()
+  includeDeleted?: boolean;
+
   @ApiPropertyOptional({
     description: 'Sort field',
     enum: ['receivedAt', 'subject', 'fromEmail'],

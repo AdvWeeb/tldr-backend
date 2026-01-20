@@ -195,6 +195,15 @@ export class Email {
   isPinned: boolean;
 
   @ApiProperty({
+    description: 'Kanban column ID this email is assigned to',
+    example: 1,
+    required: false,
+  })
+  @Column({ type: 'int', nullable: true })
+  @Index()
+  columnId: number | null;
+
+  @ApiProperty({
     description: 'Whether the email is currently snoozed',
     example: false,
   })
