@@ -65,9 +65,9 @@ export class AuthController {
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      path: '/v1/auth/refresh',
+      path: '/',
     });
 
     // Return response without refresh token
@@ -105,9 +105,9 @@ export class AuthController {
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      path: '/v1/auth/refresh',
+      path: '/',
     });
 
     // Return response without refresh token
@@ -154,9 +154,9 @@ export class AuthController {
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      path: '/v1/auth/refresh',
+      path: '/',
     });
 
     // Return response without refresh token
@@ -201,9 +201,9 @@ export class AuthController {
     res.cookie('refreshToken', result.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      path: '/v1/auth/refresh',
+      path: '/',
     });
 
     // Return response without refresh token
@@ -243,12 +243,12 @@ export class AuthController {
       await this.authService.logout(user.id, refreshToken, revokeAll === true);
     }
 
-    // Clear the refresh token cookie
+    // Clear the refresh token cookie - must match the path used when setting it
     res.clearCookie('refreshToken', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/v1/auth/refresh',
+      sameSite: 'lax',
+      path: '/',
     });
   }
 }
