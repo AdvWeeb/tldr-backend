@@ -88,7 +88,9 @@ export class EmailController {
 
   @Post('send')
   @UseInterceptors(FilesInterceptor('attachments', 10)) // Max 10 files
-  @ApiOperation({ summary: 'Send an email via Gmail API with optional attachments' })
+  @ApiOperation({
+    summary: 'Send an email via Gmail API with optional attachments',
+  })
   @ApiResponse({
     status: HttpStatus.CREATED,
     description: 'Email sent successfully',

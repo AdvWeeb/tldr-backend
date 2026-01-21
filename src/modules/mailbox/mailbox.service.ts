@@ -123,9 +123,10 @@ export class MailboxService {
     return savedMailbox;
   }
 
-  async syncMailbox(userId: number, mailboxId: number): Promise<void> {
+  async syncMailbox(userId: number, mailboxId: number, forceFullSync = false): Promise<void> {
     const mailbox = await this.findOneByUser(userId, mailboxId);
-    await this.emailSyncService.syncOnDemand(mailbox.id);
+    this.logger.log(`Sync requested for mailbox ${mailboxId}, forceFullSync: ${forceFullSync}`);
+    await this.emailSyncService.syncOnDemand(mailbox.id, forceFullSync);
   }
 
   /**
@@ -209,6 +210,24 @@ export class MailboxService {
     mailboxId: number,
   ): Promise<GmailLabelsResponseDto> {
     const mailbox = await this.findOneByUser(userId, mailboxId);
+
+    // Check if token is expired or about to expire (within 5 minutes)
+    const now = new Date();
+    const expiresAt = mailbox.tokenExpiresAt;
+    const needsRefresh =
+      !expiresAt || expiresAt.getTime() - now.getTime() < 5 * 60 * 1000;
+
+    if (needsRefresh) {
+      this.logger.log(`Refreshing expired token for mailbox ${mailbox.id}`);
+      const { accessToken, expiresAt: newExpiresAt } =
+        await this.gmailService.refreshTokens(mailbox);
+
+      // Update mailbox with new encrypted token
+      mailbox.encryptedAccessToken =
+        this.encryptionUtil.encrypt(accessToken);
+      mailbox.tokenExpiresAt = newExpiresAt;
+      await this.mailboxRepository.save(mailbox);
+    }
 
     const gmailLabels = await this.gmailService.listLabels(mailbox);
 

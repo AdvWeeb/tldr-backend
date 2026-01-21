@@ -261,4 +261,3 @@ export class InitialSchema1700000000000 implements MigrationInterface {
     await queryRunner.query(`DROP TYPE IF EXISTS "users_authprovider_enum"`);
   }
 }
-

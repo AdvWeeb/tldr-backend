@@ -18,9 +18,7 @@ export class AddVectorSupport1735000000000 implements MigrationInterface {
       const columnType = embeddingColumn[0].udt_name;
       // If it exists but is not vector type, drop it
       if (columnType !== 'vector') {
-        await queryRunner.query(
-          `ALTER TABLE "emails" DROP COLUMN "embedding"`,
-        );
+        await queryRunner.query(`ALTER TABLE "emails" DROP COLUMN "embedding"`);
         // Now add it with correct type
         await queryRunner.query(
           `ALTER TABLE "emails" ADD COLUMN "embedding" vector(768)`,

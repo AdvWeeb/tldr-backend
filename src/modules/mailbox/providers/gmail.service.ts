@@ -262,7 +262,9 @@ export class GmailService {
             .map((m) => m.message?.id)
             .filter(Boolean) as string[];
           messagesAdded.push(...addedIds);
-          this.logger.debug(`Found ${addedIds.length} messages added in history record`);
+          this.logger.debug(
+            `Found ${addedIds.length} messages added in history record`,
+          );
         }
         if (history.messagesDeleted) {
           messagesDeleted.push(
@@ -480,7 +482,7 @@ export class GmailService {
 
       // First part: message body (text or alternative)
       messageParts.push(`--${mixedBoundary}`);
-      
+
       if (emailData.bodyHtml) {
         const altBoundary = `alt_${Date.now()}_${Math.random().toString(36).substring(7)}`;
         messageParts.push(
@@ -519,7 +521,7 @@ export class GmailService {
         );
         messageParts.push('Content-Transfer-Encoding: base64');
         messageParts.push('');
-        
+
         // Encode file to base64 and split into 76-character lines (RFC 2045)
         const base64Data = file.buffer.toString('base64');
         // Push lines in chunks to avoid stack overflow with large files
@@ -701,15 +703,43 @@ export class GmailService {
   }
 
   /**
-   * List user's Gmail labels
+   * List user's Gmail labels with full details
    */
   async listLabels(mailbox: Mailbox): Promise<gmail_v1.Schema$Label[]> {
-    const { gmail } = this.getAuthenticatedClient(mailbox);
+    try {
+      const { gmail } = this.getAuthenticatedClient(mailbox);
 
-    const response = await gmail.users.labels.list({
-      userId: 'me',
-    });
+      const response = await gmail.users.labels.list({
+        userId: 'me',
+      });
 
-    return response.data.labels || [];
+      const labels = response.data.labels || [];
+
+      // Fetch full details for each label (list only returns basic info)
+      const detailedLabels = await Promise.all(
+        labels.map(async (label) => {
+          try {
+            const detailResponse = await gmail.users.labels.get({
+              userId: 'me',
+              id: label.id!,
+            });
+            return detailResponse.data;
+          } catch (error) {
+            this.logger.warn(
+              `Failed to get details for label ${label.id}: ${error instanceof Error ? error.message : String(error)}`,
+            );
+            return label;
+          }
+        }),
+      );
+
+      return detailedLabels;
+    } catch (error) {
+      this.logger.error(
+        `Failed to list labels`,
+        error instanceof Error ? error.stack : String(error),
+      );
+      throw error;
+    }
   }
 }

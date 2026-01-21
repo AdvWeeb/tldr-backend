@@ -186,11 +186,12 @@ export class EmailSyncService implements OnModuleInit, OnModuleDestroy {
       let pagesProcessed = 0;
 
       do {
+        // Fetch all emails (not just INBOX) to include emails with custom labels
         const { messages, nextPageToken } =
           await this.gmailService.listMessages(mailbox, {
             maxResults: Math.min(50, maxEmails - totalSynced), // Smaller batches for faster response
             pageToken,
-            labelIds: ['INBOX'],
+            // No labelIds filter = all emails (inbox, sent, custom labels, etc.)
           });
 
         if (messages.length > 0) {
@@ -338,7 +339,11 @@ export class EmailSyncService implements OnModuleInit, OnModuleDestroy {
 
       // Gmail API returns 404 when historyId is too old (> 7 days)
       // In this case, we need to do a full sync
-      if (err.code === 404 || err.status === 404 || err.message?.includes('404')) {
+      if (
+        err.code === 404 ||
+        err.status === 404 ||
+        err.message?.includes('404')
+      ) {
         this.logger.warn(
           `HistoryId ${mailbox.historyId} is stale for mailbox ${mailboxId}, triggering full sync`,
         );
@@ -359,7 +364,7 @@ export class EmailSyncService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async syncOnDemand(mailboxId: number): Promise<void> {
+  async syncOnDemand(mailboxId: number, forceFullSync = false): Promise<void> {
     const mailbox = await this.mailboxRepository.findOne({
       where: { id: mailboxId },
     });
@@ -373,7 +378,15 @@ export class EmailSyncService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    if (mailbox.historyId) {
+    // Check if mailbox has any emails - if not, force full sync
+    const emailCount = await this.emailRepository.count({
+      where: { mailboxId },
+    });
+
+    if (forceFullSync || emailCount === 0) {
+      this.logger.log(`Forcing full sync for mailbox ${mailboxId} (emailCount: ${emailCount})`);
+      await this.fullSync(mailboxId);
+    } else if (mailbox.historyId) {
       await this.incrementalSync(mailboxId);
     } else {
       await this.fullSync(mailboxId);

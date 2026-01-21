@@ -8,6 +8,7 @@ import {
   Param,
   ParseIntPipe,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -105,9 +106,11 @@ export class MailboxController {
   async sync(
     @CurrentUser() user: User,
     @Param('id', ParseIntPipe) id: number,
+    @Query('full') full?: string,
   ): Promise<{ message: string }> {
-    await this.mailboxService.syncMailbox(user.id, id);
-    return { message: 'Sync initiated' };
+    const forceFullSync = full === 'true';
+    await this.mailboxService.syncMailbox(user.id, id, forceFullSync);
+    return { message: forceFullSync ? 'Full sync initiated' : 'Sync initiated' };
   }
 
   @Get(':id/stats')

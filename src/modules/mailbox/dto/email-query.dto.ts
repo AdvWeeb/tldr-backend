@@ -76,7 +76,9 @@ export class EmailQueryDto {
   @IsOptional()
   label?: string;
 
-  @ApiPropertyOptional({ description: 'Exclude emails with this label (for Archive)' })
+  @ApiPropertyOptional({
+    description: 'Exclude emails with this label (for Archive)',
+  })
   @IsString()
   @IsOptional()
   excludeLabel?: string;
@@ -87,7 +89,9 @@ export class EmailQueryDto {
   @IsOptional()
   isSnoozed?: boolean;
 
-  @ApiPropertyOptional({ description: 'Include soft-deleted emails (for Trash view)' })
+  @ApiPropertyOptional({
+    description: 'Include soft-deleted emails (for Trash view)',
+  })
   @Transform(({ value }) => value === 'true' || value === true)
   @IsBoolean()
   @IsOptional()

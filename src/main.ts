@@ -61,7 +61,10 @@ async function bootstrap() {
   if (apiUrl) {
     configBuilder.addServer(apiUrl, 'Production Server');
   }
-  configBuilder.addServer(`http://localhost:${configService.get('appConfig.port')}`, 'Local Development');
+  configBuilder.addServer(
+    `http://localhost:${configService.get('appConfig.port')}`,
+    'Local Development',
+  );
 
   const config = configBuilder.build();
 

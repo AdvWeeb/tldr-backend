@@ -129,14 +129,15 @@ export class EmailService {
     }
 
     if (query.label) {
-      qb.andWhere(':label = ANY(string_to_array(email.labels, \',\'))', {
+      this.logger.debug(`Filtering by label: ${query.label}`);
+      qb.andWhere(":label = ANY(string_to_array(email.labels, ','))", {
         label: query.label,
       });
     }
 
     if (query.excludeLabel) {
       qb.andWhere(
-        '(email.labels IS NULL OR NOT :excludeLabel = ANY(string_to_array(email.labels, \',\')))',
+        "(email.labels IS NULL OR NOT :excludeLabel = ANY(string_to_array(email.labels, ',')))",
         { excludeLabel: query.excludeLabel },
       );
     }
@@ -152,16 +153,15 @@ export class EmailService {
 
     qb.addOrderBy('email.isPinned', 'DESC');
 
-    // Debug: Log the full SQL query
-    this.logger.debug(`Final SQL Query: ${qb.getSql()}`);
-    this.logger.debug(`Query Parameters: ${JSON.stringify(qb.getParameters())}`);
 
     const [emails, totalItems] = await qb
       .skip(skip)
       .take(limit)
       .getManyAndCount();
 
-    this.logger.debug(`Query returned ${emails.length} emails out of ${totalItems} total`);
+    this.logger.debug(
+      `Query returned ${emails.length} emails out of ${totalItems} total`,
+    );
 
     const totalPages = Math.ceil(totalItems / limit);
 
@@ -1067,7 +1067,10 @@ export class EmailService {
     }
 
     // Remove source column's Gmail label if specified (and different from target)
-    if (sourceColumn?.gmailLabelId && sourceColumn.gmailLabelId !== column.gmailLabelId) {
+    if (
+      sourceColumn?.gmailLabelId &&
+      sourceColumn.gmailLabelId !== column.gmailLabelId
+    ) {
       removeLabelIds.push(sourceColumn.gmailLabelId);
     }
 
