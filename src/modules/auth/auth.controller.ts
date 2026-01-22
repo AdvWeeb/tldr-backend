@@ -244,7 +244,7 @@ export class AuthController {
       await this.authService.logout(user.id, refreshToken, revokeAll === true);
     }
 
-    // Clear the refresh token cookie
+    // Clear the refresh token cookie - must match the path used when setting it
     res.clearCookie('refreshToken', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

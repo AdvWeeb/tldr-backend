@@ -229,7 +229,9 @@ export class MailboxService {
       await this.mailboxRepository.save(mailbox);
     }
 
-    const gmailLabels = await this.gmailService.listLabels(mailbox);
+    // Reload mailbox to get fresh data after potential save
+    const freshMailbox = await this.findOneByUser(userId, mailboxId);
+    const gmailLabels = await this.gmailService.listLabels(freshMailbox);
 
     const systemLabels: GmailLabelDto[] = [];
     const userLabels: GmailLabelDto[] = [];
